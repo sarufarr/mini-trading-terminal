@@ -1,9 +1,14 @@
-import { Codex } from "@codex-data/sdk";
-import { TokenRankingAttribute, RankingDirection, TokenFilterResult } from "@codex-data/sdk/dist/sdk/generated/graphql";
-import { Link, useParams } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { getCodexClient } from '@/lib/codex';
+import { getErrorMessage } from '@/lib/get-error-message';
+import {
+  TokenRankingAttribute,
+  RankingDirection,
+  TokenFilterResult,
+} from '@codex-data/sdk/dist/sdk/generated/graphql';
+import { Link, useParams } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 
-export default function NetworkPage() {
+export function NetworkPage() {
   const { networkId } = useParams<{ networkId: string }>();
   const networkIdNum = parseInt(networkId || '', 10);
 
@@ -14,40 +19,46 @@ export default function NetworkPage() {
 
   useEffect(() => {
     if (isNaN(networkIdNum)) {
-      setFetchError("Invalid Network ID");
+      setFetchError('Invalid Network ID');
       setLoading(false);
       return;
     }
 
     const fetchData = async () => {
-      const apiKey = import.meta.env.VITE_CODEX_API_KEY;
-      if (!apiKey) {
-        console.warn("VITE_CODEX_API_KEY environment variable is not set.");
-      }
-      const codexClient = new Codex(apiKey || '');
+      const codexClient = getCodexClient();
 
       try {
         const [networksResult, tokensResponse] = await Promise.all([
-          codexClient.queries.getNetworks({})
+          codexClient.queries.getNetworks({}).catch((err: Error) => {
+            console.error(`Error fetching all networks:`, err);
+            return null;
+          }),
+          codexClient.queries
+            .filterTokens({
+              filters: { network: [networkIdNum] },
+              rankings: [
+                {
+                  attribute: TokenRankingAttribute.TrendingScore,
+                  direction: RankingDirection.Desc,
+                },
+              ],
+              limit: 50,
+            })
             .catch((err: Error) => {
-              console.error(`Error fetching all networks:`, err);
-              return null;
+              console.error(
+                `Error fetching tokens for network ${networkIdNum}:`,
+                err
+              );
+              throw new Error(
+                `Failed to load tokens for network ${networkIdNum}.`
+              );
             }),
-          codexClient.queries.filterTokens({
-            filters: { network: [networkIdNum] },
-            rankings: [{
-              attribute: TokenRankingAttribute.TrendingScore,
-              direction: RankingDirection.Desc
-            }],
-            limit: 50,
-          }).catch((err: Error) => {
-            console.error(`Error fetching tokens for network ${networkIdNum}:`, err);
-            throw new Error(`Failed to load tokens for network ${networkIdNum}.`);
-          })
         ]);
 
         if (networksResult?.getNetworks) {
-          const currentNetwork = networksResult.getNetworks.find(net => net.id === networkIdNum);
+          const currentNetwork = networksResult.getNetworks.find(
+            (net) => net.id === networkIdNum
+          );
           setNetworkName(currentNetwork?.name || `Network ${networkId}`);
         } else {
           setNetworkName(`Network ${networkId}`);
@@ -56,18 +67,13 @@ export default function NetworkPage() {
         const resultsArray = tokensResponse.filterTokens?.results;
         if (resultsArray) {
           const filteredItems = resultsArray
-            .filter(item => item != null)
-            .filter(item => item.token != null);
+            .filter((item) => item != null)
+            .filter((item) => item.token != null);
           setTokenListItems(filteredItems);
         }
-
       } catch (err: unknown) {
-        console.error("Error loading network page data:", err);
-        if (err instanceof Error) {
-          setFetchError(err.message);
-        } else {
-          setFetchError("An unknown error occurred while loading page data.");
-        }
+        console.error('Error loading network page data:', err);
+        setFetchError(getErrorMessage(err));
         if (!networkName) setNetworkName(`Network ${networkId}`);
       } finally {
         setLoading(false);
@@ -75,7 +81,8 @@ export default function NetworkPage() {
     };
 
     fetchData();
-  }, [networkIdNum, networkId, networkName]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [networkIdNum, networkId]);
 
   if (loading) {
     return (
@@ -85,13 +92,18 @@ export default function NetworkPage() {
     );
   }
 
-  const pageTitle = fetchError && !tokenListItems.length ? `Error loading tokens for ${networkName}` : networkName || `Tokens on Network ${networkId}`;
+  const pageTitle =
+    fetchError && !tokenListItems.length
+      ? `Error loading tokens for ${networkName}`
+      : networkName || `Tokens on Network ${networkId}`;
 
   return (
     <main className="flex min-h-screen flex-col items-center p-12 md:p-24">
       <div className="w-full max-w-4xl flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">{pageTitle}</h1>
-        <Link to="/" className="hover:underline">&lt; Back to Networks</Link>
+        <Link to="/" className="hover:underline">
+          &lt; Back to Networks
+        </Link>
       </div>
 
       <div className="w-full max-w-4xl">
@@ -99,20 +111,31 @@ export default function NetworkPage() {
 
         {!fetchError || tokenListItems.length > 0 ? (
           <>
-            {tokenListItems.length === 0 && !fetchError && <p>Loading tokens or no tokens found...</p>}
+            {tokenListItems.length === 0 && !fetchError && (
+              <p>Loading tokens or no tokens found...</p>
+            )}
             {tokenListItems.length > 0 && (
               <table className="w-full table-fixed border-collapse border border-border">
                 <thead>
                   <tr className="border-b border-border bg-muted/50">
-                    <th className="p-2 text-left font-semibold w-[60px]">Icon</th>
+                    <th className="p-2 text-left font-semibold w-[60px]">
+                      Icon
+                    </th>
                     <th className="p-2 text-left font-semibold flex-1">Name</th>
-                    <th className="p-2 text-left font-semibold w-1/5">Symbol</th>
-                    <th className="p-2 text-left font-semibold flex-1">Exchanges</th>
+                    <th className="p-2 text-left font-semibold w-1/5">
+                      Symbol
+                    </th>
+                    <th className="p-2 text-left font-semibold flex-1">
+                      Exchanges
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {tokenListItems.map((item) => (
-                    <tr key={item.token?.address} className="border-b border-dashed border-border/30 hover:bg-muted/30">
+                    <tr
+                      key={item.token?.address}
+                      className="border-b border-dashed border-border/30 hover:bg-muted/30"
+                    >
                       <td className="p-2 flex items-center justify-center">
                         {item.token?.info?.imageThumbUrl ? (
                           <img
@@ -129,18 +152,29 @@ export default function NetworkPage() {
                         )}
                       </td>
                       <td className="p-2 truncate">
-                        <Link to={`/networks/${networkId}/tokens/${item.token?.address}`} className="block w-full h-full">
-                          {item.token?.name || "Unknown Name"}
+                        <Link
+                          to={`/networks/${networkId}/tokens/${item.token?.address}`}
+                          className="block w-full h-full"
+                        >
+                          {item.token?.name || 'Unknown Name'}
                         </Link>
                       </td>
                       <td className="p-2 truncate">
-                         <Link to={`/networks/${networkId}/tokens/${item.token?.address}`} className="block w-full h-full">
-                           {item.token?.symbol || "-"}
-                         </Link>  
+                        <Link
+                          to={`/networks/${networkId}/tokens/${item.token?.address}`}
+                          className="block w-full h-full"
+                        >
+                          {item.token?.symbol || '-'}
+                        </Link>
                       </td>
                       <td className="p-2 truncate">
-                        <Link to={`/networks/${networkId}/tokens/${item.token?.address}`} className="block w-full h-full">
-                          {item.token?.exchanges?.map((exchange) => exchange.name).join(", ") || "-"}
+                        <Link
+                          to={`/networks/${networkId}/tokens/${item.token?.address}`}
+                          className="block w-full h-full"
+                        >
+                          {item.token?.exchanges
+                            ?.map((exchange) => exchange.name)
+                            .join(', ') || '-'}
                         </Link>
                       </td>
                     </tr>

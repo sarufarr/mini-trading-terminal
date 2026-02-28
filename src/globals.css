@@ -1,5 +1,5 @@
-@import "tailwindcss";
-@import "tw-animate-css";
+@import 'tailwindcss';
+@import 'tw-animate-css';
 
 @custom-variant dark (&:is(.dark *));
 
@@ -44,18 +44,14 @@
 }
 
 :root {
-  /* Remove existing radius */
-  /* --radius: 0.625rem; */
-  /* Set basic dark mode colors */
-  --background: oklch(0.1 0 0); /* Dark gray/black */
-  --foreground: oklch(0.95 0 0); /* Light gray/white */
+  --background: oklch(0.1 0 0);
+  --foreground: oklch(0.95 0 0);
 
-  /* Keep other color variables for potential component use, but base colors are set */
   --card: oklch(0.15 0 0);
   --card-foreground: oklch(0.95 0 0);
   --popover: oklch(0.15 0 0);
   --popover-foreground: oklch(0.95 0 0);
-  --primary: oklch(0.6 0.118 184.704); /* A blueish color */
+  --primary: oklch(0.6 0.118 184.704);
   --primary-foreground: oklch(0.1 0 0);
   --secondary: oklch(0.2 0 0);
   --secondary-foreground: oklch(0.95 0 0);
@@ -63,19 +59,17 @@
   --muted-foreground: oklch(0.7 0 0);
   --accent: oklch(0.2 0 0);
   --accent-foreground: oklch(0.95 0 0);
-  --destructive: oklch(0.577 0.245 27.325); /* A reddish color */
-  --border: oklch(0.3 0 0); /* Slightly lighter border */
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.3 0 0);
   --input: oklch(0.2 0 0);
-  --ring: oklch(0.6 0.118 184.704 / 50%); /* Blueish ring */
+  --ring: oklch(0.6 0.118 184.704 / 50%);
 
-  /* Simplified chart colors if needed */
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
 
-  /* Sidebar colors adjusted */
   --sidebar: oklch(0.15 0 0);
   --sidebar-foreground: oklch(0.95 0 0);
   --sidebar-primary: oklch(0.6 0.118 184.704);
@@ -86,24 +80,123 @@
   --sidebar-ring: oklch(0.6 0.118 184.704 / 50%);
 }
 
-/* Remove the .dark class overrides as we are dark by default */
-/*
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  // ... other dark mode overrides ...
-}
-*/
-
 @layer base {
   * {
-    /* Apply square corners and basic border */
     @apply border-border outline-ring/50 rounded-none;
   }
   body {
-    /* Apply background, foreground, and default mono font */
     @apply bg-background text-foreground font-mono;
-    /* Remove default sans font variable if it exists */
-    /* --font-sans: var(--font-geist-sans); */
+  }
+}
+
+@layer components {
+  .toast-dark {
+    background: #0a0a0a !important;
+    color: #fafafa !important;
+    border: 1px solid #262626 !important;
+    box-shadow:
+      0 10px 40px rgba(0, 0, 0, 0.5),
+      0 0 0 1px rgba(255, 255, 255, 0.05) !important;
+    width: fit-content !important;
+    min-width: min(380px, 90vw) !important;
+    max-width: min(720px, 94vw) !important;
+    padding: 12px 14px;
+  }
+  .toast-dark-title {
+    font-weight: 600;
+    font-size: 0.9375rem;
+    line-height: 1.35;
+    color: #fafafa !important;
+  }
+  .toast-dark-description {
+    font-size: 0.8125rem;
+    line-height: 1.45;
+    color: #a3a3a3 !important;
+    margin-top: 4px;
+    overflow: visible !important;
+    white-space: normal !important;
+    word-break: break-word;
+  }
+  .toast-dark-action {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    background: #262626 !important;
+    color: #fafafa !important;
+    border-radius: 4px;
+    padding: 6px 12px;
+  }
+  .toast-dark-action:hover {
+    background: #404040 !important;
+    color: #fff !important;
+  }
+  .toast-dark-close {
+    color: #d4d4d4 !important;
+    background: #262626 !important;
+    border: 1px solid #404040 !important;
+    min-width: 28px !important;
+    min-height: 28px !important;
+    border-radius: 6px !important;
+  }
+  .toast-dark-close:hover {
+    color: #fff !important;
+    background: #404040 !important;
+    border-color: #525252 !important;
+  }
+
+  .text-toast-success {
+    color: #22c55e !important;
+  }
+
+  .text-toast-error {
+    color: #ef4444 !important;
+  }
+
+  .text-toast-warning {
+    color: #eab308 !important;
+  }
+
+  .trade-toast {
+    width: fit-content !important;
+    min-width: min(380px, 90vw) !important;
+    max-width: min(720px, 94vw) !important;
+    padding: 12px 14px;
+    background: #0a0a0a !important;
+    color: #fafafa !important;
+    border: 1px solid #262626 !important;
+    box-shadow:
+      0 10px 40px rgba(0, 0, 0, 0.5),
+      0 0 0 1px rgba(255, 255, 255, 0.05) !important;
+  }
+  .trade-toast-success {
+    border-left: 4px solid #22c55e !important;
+  }
+  .trade-toast-error {
+    border-left: 4px solid #ef4444 !important;
+  }
+  .trade-toast-title {
+    font-weight: 600;
+    font-size: 0.9375rem;
+    line-height: 1.35;
+    color: #fafafa !important;
+  }
+  .trade-toast-description {
+    font-size: 0.8125rem;
+    line-height: 1.45;
+    color: #a3a3a3 !important;
+    margin-top: 0.15rem;
+    overflow: visible !important;
+    white-space: normal !important;
+    word-break: break-word;
+  }
+  .trade-toast-action {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    background: #262626 !important;
+    color: #fafafa !important;
+    border-radius: 4px;
+  }
+  .trade-toast-action:hover {
+    background: #404040 !important;
+    color: #fff !important;
   }
 }

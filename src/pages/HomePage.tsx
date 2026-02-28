@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
-import NetworkList from "@/components/NetworkList";
-import { getCodexClient } from "@/lib/codex";
+import { useEffect, useState } from 'react';
+import { NetworkList } from '@/components/NetworkList';
+import { getCodexClient } from '@/lib/codex';
 
 type Network = {
   id: number;
@@ -8,20 +8,20 @@ type Network = {
 };
 
 const topNetworkNames = [
-  "Solana",
-  "Ethereum",
-  "BNB Chain",
-  "Base",
-  "Arbitrum",
-  "Unichain",
-  "Sui",
-  "Tron",
-  "Polygon",
-  "Sonic",
-  "Aptos"
+  'Solana',
+  'Ethereum',
+  'BNB Chain',
+  'Base',
+  'Arbitrum',
+  'Unichain',
+  'Sui',
+  'Tron',
+  'Polygon',
+  'Sonic',
+  'Aptos',
 ];
 
-export default function HomePage() {
+export function HomePage() {
   const [topNetworks, setTopNetworks] = useState<Network[]>([]);
   const [restNetworks, setRestNetworks] = useState<Network[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -32,12 +32,13 @@ export default function HomePage() {
       const codexClient = getCodexClient();
       try {
         const result = await codexClient.queries.getNetworks({});
-        const allNetworks = result.getNetworks?.filter(net => net != null) as Network[] || [];
+        const allNetworks =
+          (result.getNetworks?.filter((net) => net != null) as Network[]) || [];
 
         const topNetworksMap = new Map<string, Network>();
         const rest: Network[] = [];
 
-        allNetworks.forEach(network => {
+        allNetworks.forEach((network) => {
           if (topNetworkNames.includes(network.name)) {
             topNetworksMap.set(network.name, network);
           } else {
@@ -46,7 +47,7 @@ export default function HomePage() {
         });
 
         const top = topNetworkNames
-          .map(name => topNetworksMap.get(name))
+          .map((name) => topNetworksMap.get(name))
           .filter((network): network is Network => network !== undefined);
 
         rest.sort((a, b) => a.name.localeCompare(b.name));
@@ -54,8 +55,8 @@ export default function HomePage() {
         setTopNetworks(top);
         setRestNetworks(rest);
       } catch (err) {
-        console.error("Error fetching networks:", err);
-        setError("Failed to load networks.");
+        console.error('Error fetching networks:', err);
+        setError('Failed to load networks.');
       } finally {
         setLoading(false);
       }

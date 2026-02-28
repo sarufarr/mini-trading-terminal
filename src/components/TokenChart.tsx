@@ -8,17 +8,14 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'; // Assuming shadcn Card is installed
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
-// Type for the data expected by the chart (from getBars)
-// Adjust based on actual getBars response structure
 export interface ChartDataPoint {
-  time: number; // Assuming timestamp
+  time: number;
   open?: number | null;
   high?: number | null;
   low?: number | null;
   close?: number | null;
-  // Add other fields like volume if needed
 }
 
 interface TokenChartProps {
@@ -26,7 +23,10 @@ interface TokenChartProps {
   title?: string;
 }
 
-export const TokenChart: React.FC<TokenChartProps> = ({ data, title = "Price Chart" }) => {
+export const TokenChart: React.FC<TokenChartProps> = ({
+  data,
+  title = 'Price Chart',
+}) => {
   if (!data || data.length === 0) {
     return (
       <Card>
@@ -40,14 +40,15 @@ export const TokenChart: React.FC<TokenChartProps> = ({ data, title = "Price Cha
     );
   }
 
-  // Format timestamp for XAxis
   const formatXAxis = (tickItem: number) => {
-    return new Date(tickItem * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    return new Date(tickItem * 1000).toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+    });
   };
 
-  // Format tooltip value
   const formatTooltipValue = (value: number) => {
-    return value.toFixed(4); // Adjust precision as needed
+    return value.toFixed(4);
   };
 
   return (
@@ -87,7 +88,7 @@ export const TokenChart: React.FC<TokenChartProps> = ({ data, title = "Price Cha
               contentStyle={{
                 backgroundColor: 'hsl(var(--background))',
                 borderColor: 'hsl(var(--border))',
-                color: '#FFFFFF'
+                color: '#FFFFFF',
               }}
               labelFormatter={formatXAxis}
               formatter={formatTooltipValue}
@@ -99,7 +100,6 @@ export const TokenChart: React.FC<TokenChartProps> = ({ data, title = "Price Cha
               activeDot={{ r: 8 }}
               dot={false}
             />
-            {/* Add lines for open, high, low if needed */}
           </LineChart>
         </ResponsiveContainer>
       </CardContent>

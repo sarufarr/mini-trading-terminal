@@ -1,72 +1,100 @@
-import { Connection, PublicKey, Keypair, VersionedTransaction } from "@solana/web3.js";
-import { getAssociatedTokenAddressSync } from "@solana/spl-token";
-import Decimal from "decimal.js";
-import bs58 from "bs58";
+import {
+  Connection,
+  Keypair,
+  PublicKey,
+  VersionedTransaction,
+  BlockhashWithExpiryBlockHeight,
+  type RpcResponseAndContext,
+  type SignatureResult,
+  type SimulatedTransactionResponse,
+} from '@solana/web3.js';
+import { getAssociatedTokenAddressSync } from '@solana/spl-token';
+import Decimal from 'decimal.js';
+import bs58 from 'bs58';
+import { env } from '@/env';
 
-export const createConnection = () => {
-  return new Connection(import.meta.env.VITE_HELIUS_RPC_URL);
-};
+export const connection = new Connection(env.VITE_HELIUS_RPC_URL);
 
-export const createKeypair = (privateKey: string) => {
-  const secretKey = bs58.decode(privateKey);
-  return Keypair.fromSecretKey(secretKey);
-};
+export const keypair = Keypair.fromSecretKey(
+  bs58.decode(env.VITE_SOLANA_PRIVATE_KEY)
+);
 
-export const getSolanaBalance = async (publicKey: string, connection: Connection): Promise<Decimal> => {
+export const createKeypair = (privateKey: string): Keypair =>
+  Keypair.fromSecretKey(bs58.decode(privateKey));
+
+export const getSolanaBalance = async (
+  connection: Connection,
+  publicKey: string
+): Promise<Decimal> => {
   const balance = await connection.getBalance(new PublicKey(publicKey));
   return new Decimal(balance);
 };
 
 export const getTokenBalance = async (
-  publicKey: string,
-  tokenAddress: string,
   connection: Connection,
-): Promise<Decimal> => {
+  publicKey: string,
+  tokenAddress: string
+): Promise<Decimal | null> => {
   try {
     const mint = new PublicKey(tokenAddress);
     const owner = new PublicKey(publicKey);
 
-    const tokenAccountInfo = await connection.getAccountInfo(mint);
-    if (!tokenAccountInfo) {
-      return new Decimal(0);
-    }
+    const mintInfo = await connection.getAccountInfo(mint);
+    if (!mintInfo) return null;
 
     const tokenAccountPubkey = getAssociatedTokenAddressSync(
       mint,
       owner,
       false,
-      tokenAccountInfo.owner,
+      mintInfo.owner
     );
 
-    try {
-      const response =
-        await connection.getTokenAccountBalance(tokenAccountPubkey);
-      return new Decimal(response.value.amount);
-    } catch (_error) {
-      return new Decimal(0);
-    }
+    const response =
+      await connection.getTokenAccountBalance(tokenAccountPubkey);
+    return new Decimal(response.value.amount);
   } catch (error) {
-    console.error(`Error fetching Solana token balance:`, error);
-    return new Decimal(0);
+    console.error('Error fetching token balance:', error);
+    return null;
   }
 };
 
-export const signTransaction = (keypair: Keypair, transaction: VersionedTransaction): VersionedTransaction => {
-  transaction.sign([keypair]);
+export const signTransaction = (
+  kp: Keypair,
+  transaction: VersionedTransaction
+): VersionedTransaction => {
+  transaction.sign([kp]);
   return transaction;
 };
 
-export const sendTransaction = async (transaction: VersionedTransaction, connection: Connection) => {
-  const signature = await connection.sendTransaction(transaction);
-  return signature;
+export const sendTransaction = async (
+  connection: Connection,
+  transaction: VersionedTransaction
+): Promise<string> => {
+  return connection.sendTransaction(transaction);
 };
 
-export const confirmTransaction = async (signature: string, connection: Connection) => {
-  const blockHash = await connection.getLatestBlockhash();
-  const confirmation = await connection.confirmTransaction({
-    signature,
-    blockhash: blockHash.blockhash,
-    lastValidBlockHeight: blockHash.lastValidBlockHeight,
-  }, "confirmed");
-  return confirmation;
+export const simulateTransaction = async (
+  connection: Connection,
+  transaction: VersionedTransaction
+): Promise<SimulatedTransactionResponse> => {
+  const response = await connection.simulateTransaction(transaction, {
+    commitment: 'processed',
+    sigVerify: true,
+  });
+  return response.value;
+};
+
+export const confirmTransaction = async (
+  connection: Connection,
+  signature: string,
+  blockhashCtx: BlockhashWithExpiryBlockHeight
+): Promise<RpcResponseAndContext<SignatureResult>> => {
+  return connection.confirmTransaction(
+    {
+      signature,
+      blockhash: blockhashCtx.blockhash,
+      lastValidBlockHeight: blockhashCtx.lastValidBlockHeight,
+    },
+    'confirmed'
+  );
 };

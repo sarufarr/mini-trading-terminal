@@ -1,79 +1,105 @@
-import { useCallback, useEffect, useState } from "react";
-import { createKeypair } from "@/lib/solana";
-import { getCodexClient } from "@/lib/codex";
-import Decimal from "decimal.js";
-import { Codex } from "@codex-data/sdk";
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import Decimal from 'decimal.js';
+import { getCodexClient } from '@/lib/codex';
+import { keypair } from '@/lib/solana';
+import { MIN_LOADING_MS } from '@/constants/ui';
 
-export const useBalance = (tokenAddress: string, tokenDecimals: number, nativeDecimals: number, networkId: number) => {
-  const [nativeBalance, setNativeBalance] = useState<number>(0);
-  const [nativeAtomicBalance, setNativeAtomicBalance] = useState<Decimal>(new Decimal(0));
-  const [tokenBalance, setTokenBalance] = useState<number>(0);
-  const [tokenAtomicBalance, setTokenAtomicBalance] = useState<Decimal>(new Decimal(0));
-  const [loading, setLoading] = useState<boolean>(true);
-  const [ codexClient, setCodexClient ] = useState<Codex | null>(null);
+interface UseBalanceReturn {
+  nativeBalance: number;
+  nativeAtomicBalance: Decimal;
+  tokenBalance: number;
+  tokenAtomicBalance: Decimal;
+  loading: boolean;
+  error: Error | null;
+  refreshBalance: () => Promise<void>;
+}
 
-  useEffect(() => {
-    const sdk = getCodexClient();
-    setCodexClient(sdk);
-  }, []);
+type TUseBalance = (
+  tokenAddress: string,
+  tokenDecimals: number,
+  nativeDecimals: number,
+  networkId: number
+) => UseBalanceReturn;
+export const useBalance: TUseBalance = (
+  tokenAddress,
+  tokenDecimals,
+  nativeDecimals,
+  networkId
+) => {
+  const [nativeBalance, setNativeBalance] = useState(0);
+  const [nativeAtomicBalance, setNativeAtomicBalance] = useState(
+    new Decimal(0)
+  );
+  const [tokenBalance, setTokenBalance] = useState(0);
+  const [tokenAtomicBalance, setTokenAtomicBalance] = useState(new Decimal(0));
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+
+  const walletAddress = useMemo(() => keypair.publicKey.toBase58(), []);
 
   const refreshBalance = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    const start = Date.now();
     try {
-      if (!codexClient) {
-        return;
-      }
-
-      const keypair = createKeypair(import.meta.env.VITE_SOLANA_PRIVATE_KEY);
-      const walletAddress = keypair.publicKey.toBase58();
-      setLoading(true);
-
-      const balanceResponse = await codexClient?.queries.balances({
+      const codexClient = getCodexClient();
+      const response = await codexClient.queries.balances({
         input: {
           networks: [networkId],
-          walletAddress: walletAddress,
+          walletAddress,
           includeNative: true,
         },
       });
 
-      // Process native balance (SOL)
-      const nativeTokenId = `native:${networkId}`;
-      const nativeBalanceItem = balanceResponse?.balances?.items.find(
-        item => item.tokenId === nativeTokenId
-      );
+      const items = response?.balances?.items ?? [];
 
-      if (nativeBalanceItem) {
-        const atomicBalance = new Decimal(nativeBalanceItem.balance);
-        setNativeAtomicBalance(atomicBalance);
-        setNativeBalance(atomicBalance.div(10 ** nativeDecimals).toNumber());
+      const native = items.find((i) => i.tokenId === `native:${networkId}`);
+      if (native) {
+        const atomic = new Decimal(native.balance);
+        setNativeAtomicBalance(atomic);
+        setNativeBalance(atomic.div(10 ** nativeDecimals).toNumber());
       } else {
         setNativeAtomicBalance(new Decimal(0));
         setNativeBalance(0);
       }
 
-      // Process token balance
-      const tokenTokenId = `${tokenAddress}:${networkId}`;
-      const tokenBalanceItem = balanceResponse?.balances?.items.find(
-        item => item.tokenId === tokenTokenId
+      const token = items.find(
+        (i) => i.tokenId === `${tokenAddress}:${networkId}`
       );
-
-      if (tokenBalanceItem) {
-        setTokenAtomicBalance(new Decimal(tokenBalanceItem.balance));
-        setTokenBalance(new Decimal(tokenBalanceItem.balance).div(10 ** tokenDecimals).toNumber());
+      if (token) {
+        const atomic = new Decimal(token.balance);
+        setTokenAtomicBalance(atomic);
+        setTokenBalance(atomic.div(10 ** tokenDecimals).toNumber());
       } else {
         setTokenAtomicBalance(new Decimal(0));
         setTokenBalance(0);
       }
-
-      setLoading(false);
-    } catch (error) {
-      console.error("Error fetching balances:", error);
+    } catch (err) {
+      const next = err instanceof Error ? err : new Error(String(err));
+      setError(next);
+      console.error('[useBalance] Failed to fetch balances:', next);
+    } finally {
+      if (import.meta.env.DEV) {
+        const elapsed = Date.now() - start;
+        if (elapsed < MIN_LOADING_MS) {
+          await new Promise((r) => setTimeout(r, MIN_LOADING_MS - elapsed));
+        }
+      }
       setLoading(false);
     }
-  }, [tokenAddress, networkId, codexClient, nativeDecimals, tokenDecimals]);
+  }, [tokenAddress, networkId, nativeDecimals, tokenDecimals, walletAddress]);
 
   useEffect(() => {
     refreshBalance();
   }, [refreshBalance]);
 
-  return { nativeBalance, nativeAtomicBalance, tokenBalance, tokenAtomicBalance, loading, refreshBalance };
+  return {
+    nativeBalance,
+    nativeAtomicBalance,
+    tokenBalance,
+    tokenAtomicBalance,
+    loading,
+    error,
+    refreshBalance,
+  };
 };

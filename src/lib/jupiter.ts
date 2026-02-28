@@ -1,6 +1,6 @@
-import { PublicKey, VersionedTransaction } from "@solana/web3.js";
-import axios, { AxiosInstance } from "axios";
-import BN from "bn.js";
+import { PublicKey, VersionedTransaction } from '@solana/web3.js';
+import axios, { AxiosInstance } from 'axios';
+import BN from 'bn.js';
 
 export interface GetOrderResponse {
   error: string | null;
@@ -28,7 +28,7 @@ export interface GetOrderResponse {
   feeMint: string;
   feeBps: number;
   prioritizationFeeLamports: number;
-  swapType: "aggregator" | "rfq" | "hashflow";
+  swapType: 'aggregator' | 'rfq' | 'hashflow';
   transaction: string | null;
   gasless: boolean;
   requestId: string;
@@ -59,7 +59,7 @@ export interface SwapEvent {
 }
 
 export interface ExecuteOrderSuccessResponse {
-  status: "Success";
+  status: 'Success';
   signature: string;
   slot: string;
   code: number;
@@ -69,7 +69,7 @@ export interface ExecuteOrderSuccessResponse {
 }
 
 export interface ExecuteOrderErrorResponse {
-  status: "Failed";
+  status: 'Failed';
   signature: string;
   error: string;
   code: number;
@@ -82,7 +82,7 @@ export type ExecuteOrderResponse =
 
 export default class Jupiter {
   private static client: AxiosInstance = axios.create({
-    baseURL: "https://lite-api.jup.ag/ultra/v1",
+    baseURL: 'https://lite-api.jup.ag/ultra/v1',
   });
 
   static async getOrder(args: {
@@ -91,13 +91,13 @@ export default class Jupiter {
     amount: BN;
     signer: PublicKey;
   }) {
-    const { data } = await this.client.get<GetOrderResponse>("order", {
+    const { data } = await this.client.get<GetOrderResponse>('order', {
       params: {
         inputMint: args.inputMint.toString(),
         outputMint: args.outputMint.toString(),
         amount: args.amount.toString(),
         taker: args.signer.toString(),
-        referralAccount: import.meta.env.VITE_JUPITER_REFERRAL_ACCOUNT!,
+        referralAccount: import.meta.env.VITE_JUPITER_REFERRAL_ACCOUNT,
         referralFee: 100,
       },
     });
@@ -109,10 +109,10 @@ export default class Jupiter {
     signedTransaction: VersionedTransaction;
   }) {
     const { requestId, signedTransaction } = args;
-    const { data } = await this.client.post<ExecuteOrderResponse>("execute", {
+    const { data } = await this.client.post<ExecuteOrderResponse>('execute', {
       requestId,
       signedTransaction: Buffer.from(signedTransaction.serialize()).toString(
-        "base64",
+        'base64'
       ),
     });
     return data;

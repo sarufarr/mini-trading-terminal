@@ -6,28 +6,24 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-} from "@/components/ui/command";
+} from '@/components/ui/command';
 
-// Keep Network type
 type Network = {
   id: number;
   name: string;
 };
 
-// Update props to accept partitioned lists
 interface NetworkListProps {
   topNetworks: Network[];
   restNetworks: Network[];
   initialError: string | null;
 }
 
-export default function NetworkList({
+export function NetworkList({
   topNetworks,
   restNetworks,
-  initialError
+  initialError,
 }: NetworkListProps) {
-
-  // If there's an initial error, display it instead of the command list
   if (initialError) {
     return (
       <div className="w-full h-full border border-border p-4 flex flex-col items-center justify-center">
@@ -36,9 +32,8 @@ export default function NetworkList({
     );
   }
 
-  // If no networks loaded at all (e.g., API issue but no specific error string)
   if (topNetworks.length === 0 && restNetworks.length === 0) {
-     return (
+    return (
       <div className="w-full h-full border border-border p-4 flex flex-col items-center justify-center">
         <p>No networks available.</p>
       </div>
@@ -46,37 +41,27 @@ export default function NetworkList({
   }
 
   return (
-    // Command component takes full height and uses flex column layout internally
     <Command className="border h-full">
       <CommandInput placeholder="Search networks..." />
-      <CommandList className="h-full"> {/* Ensure list itself can take height */}
+      <CommandList className="h-full">
+        {' '}
         <CommandEmpty>No networks found.</CommandEmpty>
-
-        {/* Top Networks Group */}
         {topNetworks.length > 0 && (
           <CommandGroup heading="Top">
             {topNetworks.map((network) => (
               <Link to={`/networks/${network.id}`} key={network.id}>
-                <CommandItem
-                  value={network.name} // Value used for searching/filtering
-                  className="cursor-pointer" // Make it look clickable
-                >
+                <CommandItem value={network.name} className="cursor-pointer">
                   {network.name}
                 </CommandItem>
               </Link>
             ))}
           </CommandGroup>
         )}
-
-        {/* Rest Networks Group */}
         {restNetworks.length > 0 && (
           <CommandGroup heading="Rest">
             {restNetworks.map((network) => (
               <Link to={`/networks/${network.id}`} key={network.id}>
-                <CommandItem
-                  value={network.name} // Value used for searching/filtering
-                  className="cursor-pointer" // Make it look clickable
-                >
+                <CommandItem value={network.name} className="cursor-pointer">
                   {network.name}
                 </CommandItem>
               </Link>
