@@ -16,3 +16,12 @@ export interface PoolState {
   tickCurrent: number;
   status: number;
 }
+
+/** CLMM pool snapshot for local getAmountOut cache (key = tokenAddress, quote = SOL) */
+export interface ClmmPoolStateSnapshot {
+  sqrtPriceX64: bigint;
+  liquidity: bigint;
+  token0Mint: string;
+  token1Mint: string;
+  fetchedAt: number;
+}

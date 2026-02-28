@@ -9,7 +9,7 @@ interface UseDraggableOptions {
 }
 
 interface UseDraggableReturn {
-  handleMouseDown: (e: React.MouseEvent) => void;
+  handlePointerDown: (e: React.PointerEvent) => void;
   isDragging: RefObject<boolean>;
 }
 
@@ -29,15 +29,16 @@ export const useDraggable: TUseDraggable = (position, onMove, options = {}) => {
     startMouseY: number;
     startPosX: number;
     startPosY: number;
+    pointerId: number;
   } | null>(null);
 
-  const handleMouseDown = useCallback(
-    (e: React.MouseEvent) => {
+  const handlePointerDown = useCallback(
+    (e: React.PointerEvent) => {
       if (e.button !== 0) return;
       e.preventDefault();
       e.stopPropagation();
 
-      const { clientX: startMouseX, clientY: startMouseY } = e;
+      const { clientX: startMouseX, clientY: startMouseY, pointerId } = e;
       const { x: startPosX, y: startPosY } = { ...positionRef.current };
 
       isDragging.current = true;
@@ -46,18 +47,22 @@ export const useDraggable: TUseDraggable = (position, onMove, options = {}) => {
         startMouseY,
         startPosX,
         startPosY,
+        pointerId,
       };
       onDragStartRef.current?.();
 
       document.body.style.userSelect = 'none';
       document.body.style.cursor = 'grabbing';
+      (e.target as HTMLElement).setPointerCapture(pointerId);
     },
     [onDragStartRef, positionRef]
   );
 
   useEffect(() => {
-    const handleMouseMove = (moveEvent: MouseEvent) => {
+    const handlePointerMove = (moveEvent: PointerEvent) => {
       if (!isDragging.current || !dragStateRef.current) return;
+      if (moveEvent.pointerId !== dragStateRef.current.pointerId) return;
+      moveEvent.preventDefault();
       const { startMouseX, startMouseY, startPosX, startPosY } =
         dragStateRef.current;
 
@@ -68,8 +73,9 @@ export const useDraggable: TUseDraggable = (position, onMove, options = {}) => {
       onMoveRef.current(newPos);
     };
 
-    const handleMouseUp = (endEvent: MouseEvent) => {
+    const handlePointerUp = (endEvent: PointerEvent) => {
       if (!isDragging.current || !dragStateRef.current) return;
+      if (endEvent.pointerId !== dragStateRef.current.pointerId) return;
       const { startMouseX, startMouseY, startPosX, startPosY } =
         dragStateRef.current;
 
@@ -85,19 +91,24 @@ export const useDraggable: TUseDraggable = (position, onMove, options = {}) => {
       onDragEndRef.current?.(finalPos);
     };
 
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener('pointermove', handlePointerMove, {
+      passive: false,
+    });
+    document.addEventListener('pointerup', handlePointerUp);
+    document.addEventListener('pointercancel', handlePointerUp);
 
     return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener('pointermove', handlePointerMove);
+      document.removeEventListener('pointerup', handlePointerUp);
+      document.removeEventListener('pointercancel', handlePointerUp);
       document.body.style.userSelect = '';
       document.body.style.cursor = '';
       isDragging.current = false;
       dragStateRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Effect must run only on mount/unmount; handlers close over refs, not reactive deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount/unmount only; refs used inside
   }, []);
 
-  return { handleMouseDown, isDragging };
+  return { handlePointerDown, isDragging };
 };

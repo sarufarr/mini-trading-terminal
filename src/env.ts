@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { devLog } from '@/lib/dev-log';
 
 const EnvSchema = z.object({
   VITE_CODEX_API_KEY: z.string().min(1, 'VITE_CODEX_API_KEY is required'),
@@ -20,7 +21,12 @@ const EnvSchema = z.object({
   VITE_JITO_TIP_LAMPORTS: z
     .string()
     .optional()
-    .transform((v) => (v === '' ? undefined : v)),
+    .transform((v) => (v === '' ? undefined : v))
+    .transform((v) => {
+      if (v == null) return undefined;
+      const n = Number(v);
+      return Number.isFinite(n) && n > 0 ? n : undefined;
+    }),
   VITE_DRY_RUN: z
     .string()
     .optional()
@@ -34,11 +40,12 @@ const EnvSchema = z.object({
 });
 
 export type Env = z.infer<typeof EnvSchema>;
+export { EnvSchema };
 
 const parsed = EnvSchema.safeParse(import.meta.env);
 
 if (!parsed.success) {
-  console.error(
+  devLog.error(
     '[env] Invalid environment configuration:',
     parsed.error.flatten().fieldErrors
   );

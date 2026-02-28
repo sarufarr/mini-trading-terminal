@@ -69,7 +69,7 @@ describe('raydium-clmm tick-array', () => {
   });
 
   describe('getSwapTickArrays', () => {
-    it('returns 3 tick array addresses for zeroForOne', () => {
+    it('returns 3 tick array addresses for zeroForOne when endTick not provided', () => {
       const tickCurrent = 0;
       const tickSpacing = 60;
       const addrs = getSwapTickArrays(poolId, tickCurrent, tickSpacing, true);
@@ -80,7 +80,7 @@ describe('raydium-clmm tick-array', () => {
       expect(addrs[2]).toBeInstanceOf(PublicKey);
     });
 
-    it('returns 3 tick array addresses for oneForZero', () => {
+    it('returns 3 tick array addresses for oneForZero when endTick not provided', () => {
       const tickCurrent = 0;
       const tickSpacing = 60;
       const addrs = getSwapTickArrays(poolId, tickCurrent, tickSpacing, false);
@@ -106,6 +106,21 @@ describe('raydium-clmm tick-array', () => {
 
       expect(addrsZfo[1].equals(addrsOfo[1])).toBe(false);
       expect(addrsZfo[2].equals(addrsOfo[2])).toBe(false);
+    });
+
+    it('returns more than 3 tick arrays when endTick spans multiple arrays', () => {
+      const tickSpacing = 60;
+      const step = tickSpacing * TICK_ARRAY_SIZE;
+      const tickCurrent = step * 2;
+      const endTick = tickCurrent - step * 3;
+      const addrs = getSwapTickArrays(
+        poolId,
+        tickCurrent,
+        tickSpacing,
+        true,
+        endTick
+      );
+      expect(addrs.length).toBeGreaterThanOrEqual(4);
     });
   });
 });

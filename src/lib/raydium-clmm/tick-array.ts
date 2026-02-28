@@ -2,6 +2,9 @@ import { PublicKey } from '@solana/web3.js';
 import { i32ToBeBytes } from '@/lib/utils';
 import { RAYDIUM_CLMM_PROGRAM_ID, TICK_ARRAY_SIZE } from './constants';
 
+/** Max tick arrays per swap to avoid tx size / remaining_accounts limit */
+const MAX_TICK_ARRAYS = 10;
+
 export function getTickArrayStartIndex(
   tick: number,
   tickSpacing: number
@@ -21,22 +24,63 @@ export function getTickArrayAddress(
   return pda;
 }
 
+/**
+ * Return startIndex of all tick arrays in swap direction (current + end).
+ * Direction: endTick < tickCurrent => lower ticks, else higher. Used to pass all accounts for cross-tick swap.
+ */
+export function getTickArrayStartIndicesInRange(
+  tickCurrent: number,
+  endTick: number,
+  tickSpacing: number,
+  _zeroForOne: boolean
+): number[] {
+  const step = tickSpacing * TICK_ARRAY_SIZE;
+  const start = getTickArrayStartIndex(tickCurrent, tickSpacing);
+  const endStart = getTickArrayStartIndex(endTick, tickSpacing);
+  const indices: number[] = [];
+  if (endTick <= tickCurrent) {
+    for (
+      let i = start;
+      i >= endStart && indices.length < MAX_TICK_ARRAYS;
+      i -= step
+    )
+      indices.push(i);
+  } else {
+    for (
+      let i = start;
+      i <= endStart && indices.length < MAX_TICK_ARRAYS;
+      i += step
+    )
+      indices.push(i);
+  }
+  return indices;
+}
+
+/**
+ * Collect PDAs of all Tick Arrays in [tickCurrent, endTick] in traversal order.
+ * If endTick missing or same segment, return at least 3 arrays (legacy behavior).
+ */
 export function getSwapTickArrays(
   poolId: PublicKey,
   tickCurrent: number,
   tickSpacing: number,
-  zeroForOne: boolean
-): [PublicKey, PublicKey, PublicKey] {
+  zeroForOne: boolean,
+  endTick?: number | null
+): PublicKey[] {
   const step = tickSpacing * TICK_ARRAY_SIZE;
   const start = getTickArrayStartIndex(tickCurrent, tickSpacing);
 
-  const indices = zeroForOne
-    ? [start, start - step, start - step * 2]
-    : [start, start + step, start + step * 2];
+  const indices =
+    endTick != null && endTick !== tickCurrent
+      ? getTickArrayStartIndicesInRange(
+          tickCurrent,
+          endTick,
+          tickSpacing,
+          zeroForOne
+        )
+      : zeroForOne
+        ? [start, start - step, start - step * 2]
+        : [start, start + step, start + step * 2];
 
-  return indices.map((i) => getTickArrayAddress(poolId, i)) as [
-    PublicKey,
-    PublicKey,
-    PublicKey,
-  ];
+  return indices.map((i) => getTickArrayAddress(poolId, i));
 }

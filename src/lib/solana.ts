@@ -12,6 +12,7 @@ import { getAssociatedTokenAddressSync } from '@solana/spl-token';
 import Decimal from 'decimal.js';
 import bs58 from 'bs58';
 import { env } from '@/env';
+import { devLog } from '@/lib/dev-log';
 
 export const connection = new Connection(env.VITE_HELIUS_RPC_URL);
 
@@ -53,7 +54,7 @@ export const getTokenBalance = async (
       await connection.getTokenAccountBalance(tokenAccountPubkey);
     return new Decimal(response.value.amount);
   } catch (error) {
-    console.error('Error fetching token balance:', error);
+    devLog.error('Error fetching token balance:', error);
     return null;
   }
 };
@@ -80,6 +81,26 @@ export const simulateTransaction = async (
   const response = await connection.simulateTransaction(transaction, {
     commitment: 'processed',
     sigVerify: true,
+  });
+  return response.value;
+};
+
+/**
+ * Simulate tx and return post-simulation state for given accounts (for anti-phishing balance check).
+ * addresses order must match caller's parsing; usually [payer, tokenATA].
+ */
+export const simulateTransactionWithAccounts = async (
+  connection: Connection,
+  transaction: VersionedTransaction,
+  accountAddresses: string[]
+): Promise<SimulatedTransactionResponse> => {
+  const response = await connection.simulateTransaction(transaction, {
+    commitment: 'processed',
+    sigVerify: true,
+    accounts: {
+      encoding: 'base64',
+      addresses: accountAddresses,
+    },
   });
   return response.value;
 };

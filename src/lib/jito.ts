@@ -1,5 +1,7 @@
 import axios, { type AxiosInstance } from 'axios';
 import type { VersionedTransaction } from '@solana/web3.js';
+import { env } from '@/env';
+import { devLog } from '@/lib/dev-log';
 
 interface JitoRpcError {
   code: number;
@@ -17,12 +19,12 @@ interface JitoRpcResponse<T> {
 let client: AxiosInstance | null = null;
 
 function getClient(): AxiosInstance {
-  if (!import.meta.env.VITE_JITO_BLOCK_ENGINE_URL) {
+  if (!env.VITE_JITO_BLOCK_ENGINE_URL) {
     throw new Error('Jito block engine URL is not configured');
   }
   if (!client) {
     client = axios.create({
-      baseURL: import.meta.env.VITE_JITO_BLOCK_ENGINE_URL,
+      baseURL: env.VITE_JITO_BLOCK_ENGINE_URL,
       headers: {
         'Content-Type': 'application/json',
       },
@@ -65,7 +67,7 @@ export async function getJitoTipAccounts(): Promise<string[]> {
 }
 
 export async function getRandomJitoTipAccount(): Promise<string | null> {
-  const configured = import.meta.env.VITE_JITO_TIP_ACCOUNT?.trim();
+  const configured = env.VITE_JITO_TIP_ACCOUNT?.trim();
   if (configured) return configured;
 
   const accounts = await getJitoTipAccounts();
@@ -88,6 +90,6 @@ export async function sendJitoBundle(
   const params: unknown[] = [encoded, { encoding: 'base64' }];
 
   const bundleId = await jitoRequest<string>('/bundles', 'sendBundle', params);
-  console.debug('[jito] bundle submitted:', bundleId);
+  devLog.debug('[jito] bundle submitted:', bundleId);
   return bundleId;
 }

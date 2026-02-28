@@ -2,7 +2,12 @@ import { useCallback, useEffect, useState } from 'react';
 import { useLatest } from '@/hooks/common/use-latest';
 import type { PublicKey } from '@solana/web3.js';
 import { keypair } from '@/lib/solana';
-import { executeTrade, type TradeExecuteParams } from '@/service/trade-service';
+import {
+  executeTrade,
+  type TradeExecuteParams,
+  type PrepareTradeResult,
+} from '@/service/trade-service';
+import { useTradeStore } from '@/store/trade.store';
 import { getErrorMessage } from '@/lib/get-error-message';
 import { BALANCE_REFRESH_DELAY_MS, SUCCESS_RESET_MS } from '@/constants/ui';
 import { ETradePhaseStatus, type TradePhase } from '@/types/trade';
@@ -13,66 +18,103 @@ interface UseTradeOptions {
   tokenAddress: string;
   networkId: number;
   onSuccess?: () => void;
+  onSent?: (txid: string) => void;
 }
 
 type TUseTrade = (options: UseTradeOptions) => {
   phase: TradePhase;
-  execute: (params: TradeExecuteParams) => Promise<string>;
+  execute: (
+    params: TradeExecuteParams,
+    preBuilt?: PrepareTradeResult
+  ) => Promise<string>;
   reset: () => void;
   signer: PublicKey;
 };
 
-export const useTrade: TUseTrade = ({ tokenAddress, networkId, onSuccess }) => {
+export const useTrade: TUseTrade = ({
+  tokenAddress,
+  networkId,
+  onSuccess,
+  onSent,
+}) => {
   const [phase, setPhase] = useState<TradePhase>({
     status: ETradePhaseStatus.IDLE,
   });
 
   const tokenAddressRef = useLatest(tokenAddress);
+  const preferredSwapProvider = useTradeStore((s) => s.preferredSwapProvider);
+  const setTradePhaseStore = useTradeStore((s) => s.setTradePhase);
+
+  const setPhaseAndStore = useCallback(
+    (next: TradePhase) => {
+      setPhase(next);
+      setTradePhaseStore(next);
+    },
+    [setTradePhaseStore]
+  );
 
   const execute = useCallback(
-    async (params: TradeExecuteParams): Promise<string> => {
+    async (
+      params: TradeExecuteParams,
+      preBuilt?: PrepareTradeResult
+    ): Promise<string> => {
       try {
-        setPhase({ status: ETradePhaseStatus.AWAITING_SIGNATURE });
+        setPhaseAndStore({ status: ETradePhaseStatus.AWAITING_SIGNATURE });
 
         const { txid } = await executeTrade({
           tokenAddress: tokenAddressRef.current,
           networkId,
           params,
+          preferredSwapProvider,
+          ...(preBuilt && { preBuilt }),
           onBeforeSend: () => {
-            setPhase({ status: ETradePhaseStatus.SENDING });
+            setPhaseAndStore({ status: ETradePhaseStatus.SENDING });
           },
           onAfterSend: (sentTxid) => {
-            setPhase({ status: ETradePhaseStatus.CONFIRMING, txid: sentTxid });
+            setPhaseAndStore({
+              status: ETradePhaseStatus.CONFIRMING,
+              txid: sentTxid,
+            });
+            onSent?.(sentTxid);
           },
           onSuccess: onSuccess
             ? () => setTimeout(onSuccess, BALANCE_REFRESH_DELAY_MS)
             : undefined,
         });
 
-        setPhase({ status: ETradePhaseStatus.SUCCESS, txid });
+        setPhaseAndStore({ status: ETradePhaseStatus.SUCCESS, txid });
         return txid;
       } catch (err) {
         const message = getErrorMessage(err);
-        setPhase({ status: ETradePhaseStatus.ERROR, message });
+        setPhaseAndStore({ status: ETradePhaseStatus.ERROR, message });
         throw err;
       }
     },
-    [networkId, tokenAddressRef, onSuccess]
+    [
+      networkId,
+      tokenAddressRef,
+      onSuccess,
+      onSent,
+      preferredSwapProvider,
+      setPhaseAndStore,
+    ]
   );
 
-  const reset = useCallback(
-    () => setPhase({ status: ETradePhaseStatus.IDLE }),
-    []
-  );
+  const reset = useCallback(() => {
+    const idle: TradePhase = { status: ETradePhaseStatus.IDLE };
+    setPhase(idle);
+    setTradePhaseStore(idle);
+  }, [setTradePhaseStore]);
 
   useEffect(() => {
     if (phase.status !== ETradePhaseStatus.SUCCESS) return;
-    const timer = setTimeout(
-      () => setPhase({ status: ETradePhaseStatus.IDLE }),
-      SUCCESS_RESET_MS
-    );
+    const idle: TradePhase = { status: ETradePhaseStatus.IDLE };
+    const timer = setTimeout(() => {
+      setPhase(idle);
+      setTradePhaseStore(idle);
+    }, SUCCESS_RESET_MS);
     return () => clearTimeout(timer);
-  }, [phase.status]);
+  }, [phase.status, setTradePhaseStore]);
 
   return { phase, execute, reset, signer: keypair.publicKey };
 };

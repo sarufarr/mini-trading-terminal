@@ -7,22 +7,23 @@ interface TradeErrorDismissProps {
   className?: string;
 }
 
-export const TradeErrorDismiss = memo(
-  ({ message, onDismiss, className }: TradeErrorDismissProps) => {
-    if (!import.meta.env.DEV) return null;
-    return (
-      <p
-        role="alert"
-        className={cn(
-          'text-xs text-destructive cursor-pointer hover:underline',
-          className
-        )}
-        onClick={onDismiss}
-      >
-        {message} · click to dismiss
-      </p>
-    );
-  }
-);
-
+export const TradeErrorDismiss = memo(function TradeErrorDismiss({
+  message,
+  onDismiss,
+  className,
+}: TradeErrorDismissProps) {
+  if (!import.meta.env.DEV) return null;
+  return (
+    <p
+      role="alert"
+      className={cn(
+        'text-xs text-destructive cursor-pointer hover:underline',
+        className
+      )}
+      onClick={onDismiss}
+    >
+      {message} · click to dismiss
+    </p>
+  );
+});
 TradeErrorDismiss.displayName = 'TradeErrorDismiss';

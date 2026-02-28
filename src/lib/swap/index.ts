@@ -13,11 +13,31 @@ const providers: SwapProvider[] = [
   new JupiterProvider(),
 ];
 
+const PROVIDER_NAMES = {
+  'Raydium CLMM': true,
+  Jupiter: true,
+} as const;
+
+export type PreferredSwapProvider = keyof typeof PROVIDER_NAMES;
+
+/**
+ * @param preferredProvider When set and available, use this provider first (for "better price" switch)
+ */
 export async function resolveSwapProvider(
   connection: Connection,
   tokenAddress: string,
-  networkId: number
+  networkId: number,
+  preferredProvider?: PreferredSwapProvider | null
 ): Promise<SwapProvider> {
+  if (preferredProvider && PROVIDER_NAMES[preferredProvider]) {
+    const provider = providers.find((p) => p.name === preferredProvider);
+    if (
+      provider &&
+      (await provider.isAvailable(connection, tokenAddress, networkId))
+    ) {
+      return provider;
+    }
+  }
   for (const provider of providers) {
     if (await provider.isAvailable(connection, tokenAddress, networkId)) {
       return provider;
@@ -36,6 +56,8 @@ export interface SwapRequest {
   amount: BN;
   signer: PublicKey;
   slippageBps?: number;
+  /** Used when user chooses "switch" for better price */
+  preferredSwapProvider?: PreferredSwapProvider | null;
 }
 
 export interface SwapPlan extends BuildTransactionResult {
@@ -45,11 +67,18 @@ export interface SwapPlan extends BuildTransactionResult {
 export async function buildSwapTransaction(
   request: SwapRequest
 ): Promise<SwapPlan> {
-  const { connection, tokenAddress, networkId, ...buildParams } = request;
+  const {
+    connection,
+    tokenAddress,
+    networkId,
+    preferredSwapProvider,
+    ...buildParams
+  } = request;
   const provider = await resolveSwapProvider(
     connection,
     tokenAddress,
-    networkId
+    networkId,
+    preferredSwapProvider
   );
   const result = await provider.buildTransaction({
     connection,

@@ -3,7 +3,7 @@
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, act, waitFor } from '@testing-library/react';
-import { CodexProvider } from '@/contexts/CodexContext';
+import { CodexProvider } from '@/contexts/codex-provider';
 import { FloatingTradingPanel } from '@/components/FloatingTradingPanel';
 import { useTradePanelStore } from '@/store/trade-panel.store';
 import type { EnhancedToken } from '@/lib/codex';
@@ -23,6 +23,11 @@ vi.mock('@/lib/solana', () => ({
   keypair: {
     publicKey: { toBase58: () => 'mockWallet' },
   },
+  connection: {},
+}));
+
+vi.mock('@/lib/raydium-clmm', () => ({
+  warmClmmPoolCache: vi.fn().mockResolvedValue(undefined),
 }));
 
 const mockExecuteTrade = vi.hoisted(() => vi.fn());

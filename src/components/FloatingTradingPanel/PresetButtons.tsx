@@ -28,7 +28,7 @@ export const PresetButtons = memo(function PresetButtons<T extends number>({
 }: PresetButtonsProps<T>) {
   const style = PRESET_ACCENT_BUTTON[accent];
   return (
-    <div className="flex gap-1.5">
+    <div className="flex gap-2">
       {presets.map((preset) => (
         <button
           key={preset}
@@ -37,7 +37,7 @@ export const PresetButtons = memo(function PresetButtons<T extends number>({
           disabled={disabled}
           aria-label={ariaLabel?.(preset)}
           className={cn(
-            'flex-1 min-h-9 py-2 rounded-md text-xs font-medium transition-colors',
+            'flex-1 min-h-10 py-2.5 rounded-lg text-sm font-medium transition-colors',
             disabled && 'cursor-not-allowed opacity-50',
             isSelected(preset)
               ? style

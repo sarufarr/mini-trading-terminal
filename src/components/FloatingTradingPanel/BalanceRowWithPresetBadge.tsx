@@ -1,11 +1,17 @@
 import { memo } from 'react';
 import { cn } from '@/lib/cn';
+import {
+  PRESET_BADGE_CUSTOM,
+  PRESET_BADGE_PRESET,
+} from '@/constants/preset-accent';
 import { BalanceRow } from './BalanceRow';
 
 interface BalanceRowWithPresetBadgeProps {
   loading: boolean;
   error: Error | null;
   onRetry: () => void;
+  /** When false (amount empty), badge is hidden. When true, show Custom or Preset by isCustomAmount. */
+  hasValue: boolean;
   isCustomAmount: boolean;
   balanceContent: React.ReactNode;
 }
@@ -15,6 +21,7 @@ export const BalanceRowWithPresetBadge = memo(
     loading,
     error,
     onRetry,
+    hasValue,
     isCustomAmount,
     balanceContent,
   }: BalanceRowWithPresetBadgeProps) {
@@ -26,16 +33,16 @@ export const BalanceRowWithPresetBadge = memo(
         leftLabel={
           <>
             Balance
-            <span
-              className={cn(
-                'px-1.5 py-0.5 rounded text-[10px] font-medium',
-                isCustomAmount
-                  ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400'
-                  : 'bg-muted/60 text-muted-foreground'
-              )}
-            >
-              {isCustomAmount ? 'Custom' : 'Preset'}
-            </span>
+            {hasValue && (
+              <span
+                className={cn(
+                  'px-1.5 py-0.5 text-xs font-medium rounded-xl',
+                  isCustomAmount ? PRESET_BADGE_CUSTOM : PRESET_BADGE_PRESET
+                )}
+              >
+                {isCustomAmount ? 'Custom' : 'Preset'}
+              </span>
+            )}
           </>
         }
       >
@@ -44,3 +51,5 @@ export const BalanceRowWithPresetBadge = memo(
     );
   }
 );
+
+BalanceRowWithPresetBadge.displayName = 'BalanceRowWithPresetBadge';

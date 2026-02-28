@@ -1,25 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { NetworkList } from '@/components/NetworkList';
-import { useCodexClient } from '@/contexts/CodexContext';
-
-type Network = {
-  id: number;
-  name: string;
-};
-
-const topNetworkNames = [
-  'Solana',
-  'Ethereum',
-  'BNB Chain',
-  'Base',
-  'Arbitrum',
-  'Unichain',
-  'Sui',
-  'Tron',
-  'Polygon',
-  'Sonic',
-  'Aptos',
-];
+import { useCodexClient } from '@/contexts/use-codex-client';
+import { TOP_NETWORK_NAMES } from '@/constants/ui';
+import { devLog } from '@/lib/dev-log';
+import { isNetwork, type Network } from '@/types/network';
 
 export function HomePage() {
   const codexClient = useCodexClient();
@@ -27,43 +11,48 @@ export function HomePage() {
   const [restNetworks, setRestNetworks] = useState<Network[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const fetchNetworks = useCallback(async () => {
+    try {
+      const result = await codexClient.queries.getNetworks({});
+      const allNetworks = result.getNetworks?.filter(isNetwork) ?? [];
+      const topMap = new Map<string, Network>();
+      const rest: Network[] = [];
+      for (const network of allNetworks) {
+        if ((TOP_NETWORK_NAMES as readonly string[]).includes(network.name)) {
+          topMap.set(network.name, network);
+        } else {
+          rest.push(network);
+        }
+      }
+      const top = TOP_NETWORK_NAMES.map((name) => topMap.get(name)).filter(
+        (n): n is Network => n != null
+      );
+
+      rest.sort((a, b) => a.name.localeCompare(b.name));
+      setTopNetworks(top);
+      setRestNetworks(rest);
+      setError(null);
+    } catch (err) {
+      devLog.error('Error fetching networks:', err);
+      setError('Failed to load networks.');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [codexClient]);
 
   useEffect(() => {
-    const fetchNetworks = async () => {
-      try {
-        const result = await codexClient.queries.getNetworks({});
-        const allNetworks =
-          (result.getNetworks?.filter((net) => net != null) as Network[]) || [];
-
-        const topNetworksMap = new Map<string, Network>();
-        const rest: Network[] = [];
-
-        allNetworks.forEach((network) => {
-          if (topNetworkNames.includes(network.name)) {
-            topNetworksMap.set(network.name, network);
-          } else {
-            rest.push(network);
-          }
-        });
-
-        const top = topNetworkNames
-          .map((name) => topNetworksMap.get(name))
-          .filter((network): network is Network => network !== undefined);
-
-        rest.sort((a, b) => a.name.localeCompare(b.name));
-
-        setTopNetworks(top);
-        setRestNetworks(rest);
-      } catch (err) {
-        console.error('Error fetching networks:', err);
-        setError('Failed to load networks.');
-      } finally {
-        setLoading(false);
-      }
-    };
-
+    setLoading(true);
     fetchNetworks();
-  }, [codexClient]);
+  }, [fetchNetworks]);
+
+  const refresh = useCallback(async () => {
+    setRefreshing(true);
+    setError(null);
+    await fetchNetworks();
+  }, [fetchNetworks]);
 
   return (
     <main className="flex min-h-screen flex-col p-12 md:p-24">
@@ -88,6 +77,8 @@ export function HomePage() {
             topNetworks={topNetworks}
             restNetworks={restNetworks}
             initialError={error}
+            onRefresh={refresh}
+            refreshing={refreshing}
           />
         )}
       </div>

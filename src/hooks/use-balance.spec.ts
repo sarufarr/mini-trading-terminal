@@ -5,7 +5,7 @@ import { createElement } from 'react';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor, act } from '@testing-library/react';
-import { CodexProvider } from '@/contexts/CodexContext';
+import { CodexProvider } from '@/contexts/codex-provider';
 import { useBalance } from '@/hooks/use-balance';
 
 const mockBalances = vi.hoisted(() => vi.fn());
@@ -16,7 +16,7 @@ const mockCodexClient = {
 };
 
 const wrapper = ({ children }: { children: ReactNode }) =>
-  createElement(CodexProvider, { client: mockCodexClient as never }, children);
+  createElement(CodexProvider, { client: mockCodexClient as never, children });
 
 vi.mock('@/lib/solana', () => ({
   keypair: {

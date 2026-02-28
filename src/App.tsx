@@ -1,25 +1,24 @@
+import { lazy, Suspense } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import { Toaster } from '@/components/ui/sonner';
-import { CodexProvider } from '@/contexts/CodexContext';
-import { Layout } from './components/Layout';
-import { HomePage } from './pages/HomePage';
-import { NetworkPage } from './pages/NetworkPage';
-import { TokenPage } from './pages/TokenPage';
+import { Layout } from '@/components/Layout';
+import { LoadingFallback } from '@/components/LoadingFallback';
+
+const AppCodexRoutes = lazy(() =>
+  import('@/AppCodexRoutes').then((m) => ({ default: m.AppCodexRoutes }))
+);
 
 export function App() {
   return (
-    <CodexProvider>
+    <>
       <Toaster />
       <Layout>
-        <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/networks/:networkId" element={<NetworkPage />} />
-          <Route
-            path="/networks/:networkId/tokens/:tokenId"
-            element={<TokenPage />}
-          />
-        </Routes>
+        <Suspense fallback={<LoadingFallback />}>
+          <Routes>
+            <Route path="/*" element={<AppCodexRoutes />} />
+          </Routes>
+        </Suspense>
       </Layout>
-    </CodexProvider>
+    </>
   );
 }

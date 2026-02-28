@@ -13,8 +13,13 @@ import {
   SLIPPAGE_MAX_BPS,
   DEFAULT_SLIPPAGE_BPS,
 } from '@/constants/trade';
-import { PRESET_ACCENT_BUTTON } from '@/constants/preset-accent';
-import { useTradePanelStore } from '@/store/trade-panel.store';
+import {
+  PRESET_ACCENT_BUTTON,
+  PRESET_ACCENT_INPUT_FOCUS_RING,
+  PRESET_BADGE_CUSTOM,
+  PRESET_BADGE_PRESET,
+} from '@/constants/preset-accent';
+import { useTradeStore } from '@/store/trade.store';
 import { ETradeDirection } from '@/types/trade';
 
 interface SlippageSelectorProps {
@@ -22,11 +27,15 @@ interface SlippageSelectorProps {
 }
 
 function getSlippageBpsSnapshot() {
-  return useTradePanelStore.getState().slippageBps;
+  return useTradeStore.getState().slippageBps;
 }
 
 function subscribeToSlippageBps(callback: () => void) {
-  return useTradePanelStore.subscribe(callback);
+  return useTradeStore.subscribe(callback);
+}
+
+function formatSlippagePercent(bps: number): string {
+  return String(bps / 100);
 }
 
 export const SlippageSelector = memo(function SlippageSelector({
@@ -37,13 +46,15 @@ export const SlippageSelector = memo(function SlippageSelector({
     getSlippageBpsSnapshot,
     () => DEFAULT_SLIPPAGE_BPS
   );
-  const setSlippageBps = useTradePanelStore((s) => s.setSlippageBps);
+  const setSlippageBps = useTradeStore((s) => s.setSlippageBps);
   const isBuy = direction === ETradeDirection.BUY;
 
-  const [inputValue, setInputValue] = useState(() => String(slippageBps / 100));
+  const [inputValue, setInputValue] = useState(() =>
+    formatSlippagePercent(slippageBps)
+  );
 
   useEffect(() => {
-    setInputValue(String(slippageBps / 100));
+    setInputValue(formatSlippagePercent(slippageBps));
   }, [slippageBps]);
 
   const handleInputChange = useCallback(
@@ -56,7 +67,7 @@ export const SlippageSelector = memo(function SlippageSelector({
   const handleInputBlur = useCallback(() => {
     const parsed = Number.parseFloat(inputValue);
     if (!Number.isFinite(parsed) || parsed <= 0) {
-      setInputValue(String(slippageBps / 100));
+      setInputValue(formatSlippagePercent(slippageBps));
       return;
     }
     const clamped = Math.min(
@@ -65,13 +76,13 @@ export const SlippageSelector = memo(function SlippageSelector({
     );
     const bps = Math.round(clamped * 100);
     setSlippageBps(bps);
-    setInputValue(String(bps / 100));
+    setInputValue(formatSlippagePercent(bps));
   }, [inputValue, slippageBps, setSlippageBps]);
 
   const handlePresetClick = useCallback(
     (preset: number) => {
       setSlippageBps(preset);
-      setInputValue(String(preset / 100));
+      setInputValue(formatSlippagePercent(preset));
     },
     [setSlippageBps]
   );
@@ -79,55 +90,56 @@ export const SlippageSelector = memo(function SlippageSelector({
   const isCustomSlippage = !SLIPPAGE_PRESETS_BPS.includes(slippageBps);
 
   return (
-    <div className="flex flex-col gap-1 px-1">
-      <div className="flex justify-between items-center text-xs text-muted-foreground">
+    <div className="flex flex-col gap-2">
+      <div className="flex justify-between items-center text-sm text-muted-foreground">
         <span className="flex items-center gap-1.5">
           Slippage
           <span
             className={cn(
-              'px-1.5 py-0.5 rounded text-[10px] font-medium',
-              isCustomSlippage
-                ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400'
-                : 'bg-muted/60 text-muted-foreground'
+              'px-1.5 py-0.5 rounded-xl text-[10px] font-medium',
+              isCustomSlippage ? PRESET_BADGE_CUSTOM : PRESET_BADGE_PRESET
             )}
           >
             {isCustomSlippage ? 'Custom' : 'Preset'}
           </span>
         </span>
         <span className="font-medium text-foreground">
-          {(slippageBps / 100).toString()}%
+          {formatSlippagePercent(slippageBps)}%
         </span>
       </div>
-      <div className="flex gap-1.5">
+      <div className="flex gap-2">
         {SLIPPAGE_PRESETS_BPS.map((preset) => (
           <button
             key={preset}
             onClick={() => handlePresetClick(preset)}
             className={cn(
-              'flex-1 min-h-9 py-2 rounded-md text-xs font-medium transition-colors',
+              'flex-1 min-h-10 py-2.5 rounded-lg text-sm font-medium transition-colors',
               slippageBps === preset
                 ? PRESET_ACCENT_BUTTON[isBuy ? 'green' : 'red']
                 : 'bg-muted/40 text-muted-foreground hover:bg-muted/70'
             )}
-            aria-label={`Set slippage to ${(preset / 100).toString()}%`}
+            aria-label={`Set slippage to ${formatSlippagePercent(preset)}%`}
           >
-            {(preset / 100).toString()}%
+            {formatSlippagePercent(preset)}%
           </button>
         ))}
       </div>
-      <div className="relative flex min-w-0 mt-3">
+      <div className="relative flex min-w-0 mt-4">
         <Input
           type="number"
           inputMode="decimal"
-          placeholder="Custom %"
+          placeholder={`${SLIPPAGE_MIN_BPS / 100}-${SLIPPAGE_MAX_BPS / 100}%`}
           value={inputValue}
           onChange={handleInputChange}
           onBlur={handleInputBlur}
           min={SLIPPAGE_MIN_BPS / 100}
           max={SLIPPAGE_MAX_BPS / 100}
           step={0.1}
+          aria-valuemin={SLIPPAGE_MIN_BPS / 100}
+          aria-valuemax={SLIPPAGE_MAX_BPS / 100}
           className={cn(
-            'w-full h-10 py-2 px-4 pr-6 text-sm text-center rounded-md [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none',
+            'w-full h-10 py-2 px-4 pr-6 text-sm text-center rounded-lg [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:border-input',
+            PRESET_ACCENT_INPUT_FOCUS_RING[isBuy ? 'green' : 'red'],
             isCustomSlippage &&
               'ring-1 ring-amber-500/50 dark:ring-amber-400/50 bg-amber-500/5 dark:bg-amber-500/10'
           )}
@@ -136,6 +148,9 @@ export const SlippageSelector = memo(function SlippageSelector({
           %
         </span>
       </div>
+      <p className="text-xs text-muted-foreground mt-2">
+        Min {SLIPPAGE_MIN_BPS / 100}% · Max {SLIPPAGE_MAX_BPS / 100}%
+      </p>
     </div>
   );
 });

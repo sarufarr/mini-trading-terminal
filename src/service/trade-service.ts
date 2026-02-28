@@ -23,23 +23,44 @@ import {
   keypair as defaultKeypair,
   sendTransaction,
   signTransaction,
-  simulateTransaction,
+  simulateTransactionWithAccounts,
 } from '@/lib/solana';
 import { getRandomJitoTipAccount, sendJitoBundle } from '@/lib/jito';
 import {
   DEFAULT_JITO_TIP_LAMPORTS,
   DEFAULT_SLIPPAGE_BPS,
   FEE_RESERVE_LAMPORTS,
+  PHISHING_EXTRA_SLIPPAGE_BPS,
+  PHISHING_FEE_TOLERANCE_LAMPORTS,
+  SLIPPAGE_ERROR_CODES,
+  SLIPPAGE_ERROR_PATTERN,
+  SOL_DISPLAY_DECIMALS,
 } from '@/constants/trade';
+import {
+  checkSimulationPhishing,
+  getPostBalanceFromSimulation,
+  getPreBalanceState,
+} from '@/lib/simulation-balance-check';
+import { runWithRetry, isRetryableTradeError } from '@/lib/retry';
 import { ETradeDirection } from '@/types/trade';
 import { env } from '@/env';
 import type { Env } from '@/env';
+import { devLog } from '@/lib/dev-log';
 
-const JUPITER_SLIPPAGE_EXCEEDED_ERROR_CODE = 6001;
-/** Raydium CLMM swap min amount out / slippage exceeded */
-const RAYDIUM_SLIPPAGE_EXCEEDED_ERROR_CODE = 6010;
 export const SLIPPAGE_ERROR_MESSAGE =
   'Slippage tolerance exceeded: received less than minimum. Try increasing slippage and retry.';
+
+/** Thrown when phishing check detects unexpected fund outflow; UI shows warning and blocks send */
+export class PhishingDetectedError extends Error {
+  constructor(
+    message: string,
+    public readonly reason?: string
+  ) {
+    super(message);
+    this.name = 'PhishingDetectedError';
+    Object.setPrototypeOf(this, PhishingDetectedError.prototype);
+  }
+}
 
 export interface TradeConfig {
   isDryRun: boolean;
@@ -50,15 +71,10 @@ export interface TradeConfig {
 
 export function getTradeConfig(env: Env): TradeConfig {
   const useJito = Boolean(env.VITE_JITO_BLOCK_ENGINE_URL);
-  let jitoTipLamports = DEFAULT_JITO_TIP_LAMPORTS;
-  if (
-    useJito &&
-    env.VITE_JITO_TIP_LAMPORTS != null &&
-    env.VITE_JITO_TIP_LAMPORTS !== ''
-  ) {
-    const n = Number(env.VITE_JITO_TIP_LAMPORTS);
-    if (Number.isFinite(n) && n > 0) jitoTipLamports = n;
-  }
+  const jitoTipLamports =
+    useJito && env.VITE_JITO_TIP_LAMPORTS != null
+      ? env.VITE_JITO_TIP_LAMPORTS
+      : DEFAULT_JITO_TIP_LAMPORTS;
   return {
     isDryRun: env.VITE_DRY_RUN ?? false,
     dryRunResult: env.VITE_DRY_RUN_RESULT ?? 'success',
@@ -78,6 +94,7 @@ export interface ValidateBalanceInput {
   useJito: boolean;
 }
 
+/** Balance check before build. Throws with message for UI. */
 export function validateBalanceForTrade(input: ValidateBalanceInput): void {
   const {
     direction,
@@ -94,7 +111,8 @@ export function validateBalanceForTrade(input: ValidateBalanceInput): void {
       .plus(FEE_RESERVE_LAMPORTS)
       .plus(jitoTipLamports);
     if (solBalance == null || solBalance.lt(required)) {
-      const have = solBalance?.div(LAMPORTS_PER_SOL).toFixed(4) ?? '0';
+      const have =
+        solBalance?.div(LAMPORTS_PER_SOL).toFixed(SOL_DISPLAY_DECIMALS) ?? '0';
       throw new Error(
         `Insufficient SOL balance: have ${have} SOL, need ${valueDisplay} SOL + fee reserve${useJito ? ' + Jito tip' : ''}`
       );
@@ -133,17 +151,20 @@ function isSlippageToleranceExceeded(
   ) {
     const code = (err[2] as { Custom: number }).Custom;
     if (
-      code === JUPITER_SLIPPAGE_EXCEEDED_ERROR_CODE ||
-      code === RAYDIUM_SLIPPAGE_EXCEEDED_ERROR_CODE
+      SLIPPAGE_ERROR_CODES.includes(
+        code as (typeof SLIPPAGE_ERROR_CODES)[number]
+      )
     ) {
       return true;
     }
   }
-  const slippagePattern = /0x1771|6001|6010|SlippageToleranceExceeded/i;
-  if (slippagePattern.test(reason) || slippagePattern.test(detailedMessage)) {
+  if (
+    SLIPPAGE_ERROR_PATTERN.test(reason) ||
+    SLIPPAGE_ERROR_PATTERN.test(detailedMessage)
+  ) {
     return true;
   }
-  if (Array.isArray(logs) && logs.some((l) => slippagePattern.test(l))) {
+  if (Array.isArray(logs) && logs.some((l) => SLIPPAGE_ERROR_PATTERN.test(l))) {
     return true;
   }
   return false;
@@ -184,7 +205,8 @@ export function parseSimulationError(
   const isSlippageError = isSlippageToleranceExceeded(
     simulation.err,
     reason,
-    detailedMessage
+    detailedMessage,
+    logs
   );
 
   return { reason, detailedMessage, isSlippageError };
@@ -207,6 +229,13 @@ export interface ExecuteTradeOptions {
   tokenAddress: string;
   networkId: number;
   params: TradeExecuteParams;
+  /** Passed when user chooses "switch to better price" */
+  preferredSwapProvider?: 'Raydium CLMM' | 'Jupiter' | null;
+  /** Pre-built unsigned tx; when set, skip build and go straight to sign+send (confirm flow) */
+  preBuilt?: {
+    transaction: VersionedTransaction;
+    blockhashCtx: BlockhashWithExpiryBlockHeight;
+  };
   onBeforeSend?: () => void;
   onAfterSend?: (txid: string) => void;
   onSuccess?: () => void;
@@ -225,36 +254,40 @@ export const calculateTradeAtomicAmount = (
   return params.tokenAtomicBalance.mul(params.value).div(100);
 };
 
-async function confirmAndNotify(
-  connection: Connection,
-  txid: string,
-  blockhashCtx: BlockhashWithExpiryBlockHeight,
-  onAfterSend?: (txid: string) => void
-): Promise<{ txid: string }> {
-  onAfterSend?.(txid);
-  const result = await confirmTransaction(connection, txid, blockhashCtx);
-  if (result.value.err) throw new Error('Transaction failed on-chain');
-  return { txid };
+/** Result of building a trade (unsigned), for confirm modal before sign+send */
+export interface PrepareTradeResult {
+  transaction: VersionedTransaction;
+  blockhashCtx: BlockhashWithExpiryBlockHeight;
 }
 
-export async function executeTrade(
-  options: ExecuteTradeOptions
-): Promise<{ txid: string }> {
+export interface ResolvedTradeAmount {
+  amountToUse: Decimal;
+  inputMint: PublicKey;
+  outputMint: PublicKey;
+}
+
+/**
+ * Resolve trade amount (with balance fetch + validation for non–dry-run), and mints.
+ * Shared by prepareTrade and executeTrade so balance/amount logic lives in one place.
+ */
+export async function resolveTradeAmountAndMints(options: {
+  tokenAddress: string;
+  networkId: number;
+  params: TradeExecuteParams;
+  config: TradeConfig;
+  keypair: Keypair;
+  connection: Connection;
+}): Promise<ResolvedTradeAmount> {
   const {
     tokenAddress,
-    networkId,
+    networkId: _networkId,
     params,
-    onBeforeSend,
-    onAfterSend,
-    onSuccess,
-    keypair: kp = defaultKeypair,
-    connection: conn = defaultConnection,
-    config: configOverride,
+    config,
+    keypair: kp,
+    connection: conn,
   } = options;
-
-  const config = configOverride ?? getTradeConfig(env);
-  const { isDryRun, dryRunResult, useJito, jitoTipLamports } = config;
-  const { direction, slippageBps } = params;
+  const { isDryRun, useJito, jitoTipLamports } = config;
+  const { direction } = params;
 
   let amountToUse = calculateTradeAtomicAmount(params);
 
@@ -308,6 +341,42 @@ export async function executeTrade(
       ? new PublicKey(tokenAddress)
       : NATIVE_MINT;
 
+  return { amountToUse, inputMint, outputMint };
+}
+
+/**
+ * Build transaction and validate balance only; no signing. For confirm modal with fund-flow summary.
+ * Returns unsigned transaction + blockhashCtx; pass to executeTrade as preBuilt after user confirms.
+ */
+export async function prepareTrade(
+  options: Omit<
+    ExecuteTradeOptions,
+    'preBuilt' | 'onBeforeSend' | 'onAfterSend' | 'onSuccess'
+  >
+): Promise<PrepareTradeResult> {
+  const {
+    tokenAddress,
+    networkId,
+    params,
+    preferredSwapProvider,
+    keypair: kp = defaultKeypair,
+    connection: conn = defaultConnection,
+    config: configOverride,
+  } = options;
+
+  const config = configOverride ?? getTradeConfig(env);
+  const { slippageBps } = params;
+
+  const { amountToUse, inputMint, outputMint } =
+    await resolveTradeAmountAndMints({
+      tokenAddress,
+      networkId,
+      params,
+      config,
+      keypair: kp,
+      connection: conn,
+    });
+
   const { transaction, blockhashCtx } = await buildSwapTransaction({
     connection: conn,
     tokenAddress,
@@ -317,11 +386,90 @@ export async function executeTrade(
     amount: bn(amountToUse),
     signer: kp.publicKey,
     slippageBps: slippageBps ?? DEFAULT_SLIPPAGE_BPS,
+    preferredSwapProvider: preferredSwapProvider ?? undefined,
   });
+
+  return { transaction, blockhashCtx };
+}
+
+async function confirmAndNotify(
+  connection: Connection,
+  txid: string,
+  blockhashCtx: BlockhashWithExpiryBlockHeight,
+  onAfterSend?: (txid: string) => void
+): Promise<{ txid: string }> {
+  onAfterSend?.(txid);
+  const result = await confirmTransaction(connection, txid, blockhashCtx);
+  if (result.value.err) throw new Error('Transaction failed on-chain');
+  return { txid };
+}
+
+export async function executeTrade(
+  options: ExecuteTradeOptions
+): Promise<{ txid: string }> {
+  const {
+    tokenAddress,
+    networkId,
+    params,
+    preferredSwapProvider,
+    onBeforeSend,
+    onAfterSend,
+    onSuccess,
+    keypair: kp = defaultKeypair,
+    connection: conn = defaultConnection,
+    config: configOverride,
+  } = options;
+
+  const config = configOverride ?? getTradeConfig(env);
+  const { isDryRun, dryRunResult, useJito, jitoTipLamports } = config;
+  const { direction, slippageBps } = params;
+
+  const { amountToUse, inputMint, outputMint } =
+    await resolveTradeAmountAndMints({
+      tokenAddress,
+      networkId,
+      params,
+      config,
+      keypair: kp,
+      connection: conn,
+    });
+
+  let transaction: VersionedTransaction;
+  let blockhashCtx: BlockhashWithExpiryBlockHeight;
+
+  if (options.preBuilt) {
+    transaction = options.preBuilt.transaction;
+    blockhashCtx = options.preBuilt.blockhashCtx;
+  } else {
+    const built = await buildSwapTransaction({
+      connection: conn,
+      tokenAddress,
+      networkId,
+      inputMint,
+      outputMint,
+      amount: bn(amountToUse),
+      signer: kp.publicKey,
+      slippageBps: slippageBps ?? DEFAULT_SLIPPAGE_BPS,
+      preferredSwapProvider: preferredSwapProvider ?? undefined,
+    });
+    transaction = built.transaction;
+    blockhashCtx = built.blockhashCtx;
+  }
 
   const signed = signTransaction(kp, transaction);
 
-  const simulation = await simulateTransaction(conn, signed);
+  const tokenMint = new PublicKey(tokenAddress);
+  const preBalance = await getPreBalanceState(conn, kp.publicKey, tokenMint);
+  const accountAddresses = [
+    kp.publicKey.toBase58(),
+    preBalance.tokenATA.toBase58(),
+  ];
+
+  const simulation = await simulateTransactionWithAccounts(
+    conn,
+    signed,
+    accountAddresses
+  );
   if (simulation.err) {
     const parsed = parseSimulationError({
       ...simulation,
@@ -333,17 +481,40 @@ export async function executeTrade(
     throw new Error(parsed.detailedMessage);
   }
 
+  const postBalance = getPostBalanceFromSimulation(simulation, [
+    accountAddresses[0],
+    accountAddresses[1],
+  ] as [string, string]);
+  if (postBalance) {
+    const amountInAtomic = BigInt(amountToUse.toFixed(0));
+    const phishingResult = checkSimulationPhishing({
+      direction,
+      amountIn: amountInAtomic,
+      slippageBps: slippageBps ?? DEFAULT_SLIPPAGE_BPS,
+      pre: preBalance,
+      post: postBalance,
+      feeToleranceLamports: PHISHING_FEE_TOLERANCE_LAMPORTS,
+      extraSlippageBps: PHISHING_EXTRA_SLIPPAGE_BPS,
+    });
+    if (!phishingResult.safe) {
+      throw new PhishingDetectedError(
+        'Unexpected fund outflow detected; possible malicious contract.',
+        phishingResult.reason
+      );
+    }
+  }
+
   if (isDryRun) {
     const fakeTxid = 'dry-run-simulated-' + Date.now();
     if (dryRunResult === 'fail') {
-      console.warn(
+      devLog.warn(
         '[trade] DRY RUN: simulating on-chain failure (VITE_DRY_RUN_RESULT=fail).'
       );
       throw new Error(
         'Dry run: simulated on-chain failure. Set VITE_DRY_RUN_RESULT=success or unset to simulate success.'
       );
     }
-    console.warn('[trade] DRY RUN: simulation passed, tx not sent.', fakeTxid);
+    devLog.warn('[trade] DRY RUN: simulation passed, tx not sent.', fakeTxid);
     onAfterSend?.(fakeTxid);
     onSuccess?.();
     return { txid: fakeTxid };
@@ -395,23 +566,57 @@ export async function executeTrade(
     );
     onSuccess?.();
     return result;
-  } catch (sendErr: unknown) {
-    const slippagePattern = /0x1771|6001|6010|SlippageToleranceExceeded/i;
+  } catch (firstErr: unknown) {
     const message =
-      sendErr instanceof Error ? sendErr.message : String(sendErr);
-    if (slippagePattern.test(message)) {
+      firstErr instanceof Error ? firstErr.message : String(firstErr);
+    if (SLIPPAGE_ERROR_PATTERN.test(message)) {
       throw new Error(SLIPPAGE_ERROR_MESSAGE);
     }
-    if (sendErr instanceof SendTransactionError) {
-      const logs = sendErr.logs ?? (await sendErr.getLogs(conn));
-      if (Array.isArray(logs) && logs.some((l) => slippagePattern.test(l))) {
+    if (firstErr instanceof SendTransactionError) {
+      const logs = firstErr.logs ?? (await firstErr.getLogs(conn));
+      if (
+        Array.isArray(logs) &&
+        logs.some((l) => SLIPPAGE_ERROR_PATTERN.test(l))
+      ) {
         throw new Error(SLIPPAGE_ERROR_MESSAGE);
       }
       throw new Error(
-        sendErr.transactionError.message +
+        firstErr.transactionError.message +
           (logs?.length ? `\nLogs: ${logs.slice(-5).join(' ')}` : '')
       );
     }
-    throw sendErr;
+    if (!isRetryableTradeError(firstErr)) throw firstErr;
+    const result = await runWithRetry(
+      async () => {
+        const built = await buildSwapTransaction({
+          connection: conn,
+          tokenAddress,
+          networkId,
+          inputMint,
+          outputMint,
+          amount: bn(amountToUse),
+          signer: kp.publicKey,
+          slippageBps: slippageBps ?? DEFAULT_SLIPPAGE_BPS,
+          preferredSwapProvider: preferredSwapProvider ?? undefined,
+        });
+        const signedTx = signTransaction(kp, built.transaction);
+        const txid = await sendTransaction(conn, signedTx);
+        return confirmAndNotify(conn, txid, built.blockhashCtx, onAfterSend);
+      },
+      {
+        maxRetries: 3,
+        baseDelayMs: 1000,
+        multiplier: 2,
+        maxDelayMs: 15_000,
+        onRetry: (attempt, err) => {
+          devLog.warn(
+            `[trade] Send/confirm failed, retry ${attempt}/3:`,
+            err instanceof Error ? err.message : err
+          );
+        },
+      }
+    );
+    onSuccess?.();
+    return result;
   }
 }

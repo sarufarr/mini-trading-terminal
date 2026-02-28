@@ -44,6 +44,7 @@
 }
 
 :root {
+  --radius: 0.5rem;
   --background: oklch(0.1 0 0);
   --foreground: oklch(0.95 0 0);
 
@@ -90,45 +91,62 @@
 }
 
 @layer components {
-  .toast-dark {
+  /* Shared toast container (sonner toast-dark + trade-toast) */
+  .toast-dark,
+  .trade-toast {
+    width: fit-content !important;
+    min-width: min(380px, 90vw) !important;
+    max-width: min(720px, 94vw) !important;
+    padding: 12px 14px;
     background: #0a0a0a !important;
     color: #fafafa !important;
     border: 1px solid #262626 !important;
     box-shadow:
       0 10px 40px rgba(0, 0, 0, 0.5),
       0 0 0 1px rgba(255, 255, 255, 0.05) !important;
-    width: fit-content !important;
-    min-width: min(380px, 90vw) !important;
-    max-width: min(720px, 94vw) !important;
-    padding: 12px 14px;
   }
-  .toast-dark-title {
+
+  .toast-dark-title,
+  .trade-toast-title {
     font-weight: 600;
     font-size: 0.9375rem;
     line-height: 1.35;
     color: #fafafa !important;
   }
-  .toast-dark-description {
+
+  .toast-dark-description,
+  .trade-toast-description {
     font-size: 0.8125rem;
     line-height: 1.45;
     color: #a3a3a3 !important;
-    margin-top: 4px;
     overflow: visible !important;
     white-space: normal !important;
     word-break: break-word;
   }
-  .toast-dark-action {
+  .toast-dark-description {
+    margin-top: 4px;
+  }
+  .trade-toast-description {
+    margin-top: 0.15rem;
+  }
+
+  .toast-dark-action,
+  .trade-toast-action {
     font-size: 0.8125rem;
     font-weight: 600;
     background: #262626 !important;
     color: #fafafa !important;
     border-radius: 4px;
+  }
+  .toast-dark-action {
     padding: 6px 12px;
   }
-  .toast-dark-action:hover {
+  .toast-dark-action:hover,
+  .trade-toast-action:hover {
     background: #404040 !important;
     color: #fff !important;
   }
+
   .toast-dark-close {
     color: #d4d4d4 !important;
     background: #262626 !important;
@@ -155,48 +173,14 @@
     color: #eab308 !important;
   }
 
-  .trade-toast {
-    width: fit-content !important;
-    min-width: min(380px, 90vw) !important;
-    max-width: min(720px, 94vw) !important;
-    padding: 12px 14px;
-    background: #0a0a0a !important;
-    color: #fafafa !important;
-    border: 1px solid #262626 !important;
-    box-shadow:
-      0 10px 40px rgba(0, 0, 0, 0.5),
-      0 0 0 1px rgba(255, 255, 255, 0.05) !important;
-  }
   .trade-toast-success {
     border-left: 4px solid #22c55e !important;
   }
   .trade-toast-error {
     border-left: 4px solid #ef4444 !important;
   }
-  .trade-toast-title {
-    font-weight: 600;
-    font-size: 0.9375rem;
-    line-height: 1.35;
-    color: #fafafa !important;
-  }
-  .trade-toast-description {
-    font-size: 0.8125rem;
-    line-height: 1.45;
-    color: #a3a3a3 !important;
-    margin-top: 0.15rem;
-    overflow: visible !important;
-    white-space: normal !important;
-    word-break: break-word;
-  }
-  .trade-toast-action {
-    font-size: 0.8125rem;
-    font-weight: 600;
-    background: #262626 !important;
-    color: #fafafa !important;
-    border-radius: 4px;
-  }
-  .trade-toast-action:hover {
-    background: #404040 !important;
-    color: #fff !important;
+  .trade-toast-phishing {
+    border-left: 4px solid #dc2626 !important;
+    background: rgba(220, 38, 38, 0.08) !important;
   }
 }

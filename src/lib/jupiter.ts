@@ -1,6 +1,7 @@
 import { PublicKey, VersionedTransaction } from '@solana/web3.js';
 import axios, { AxiosInstance } from 'axios';
 import BN from 'bn.js';
+import { env } from '@/env';
 
 export interface GetOrderResponse {
   error: string | null;
@@ -97,7 +98,7 @@ export default class Jupiter {
         outputMint: args.outputMint.toString(),
         amount: args.amount.toString(),
         taker: args.signer.toString(),
-        referralAccount: import.meta.env.VITE_JUPITER_REFERRAL_ACCOUNT,
+        referralAccount: env.VITE_JUPITER_REFERRAL_ACCOUNT,
         referralFee: 100,
       },
     });

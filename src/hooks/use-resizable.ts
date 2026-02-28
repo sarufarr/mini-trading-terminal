@@ -106,7 +106,8 @@ export const useResizable: TUseResizable = (
       isResizingRef.current = false;
       resizeStateRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Effect must run only on mount/unmount; handlers close over refs, not reactive deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount/unmount only; refs used inside
   }, []);
 
   return { handleResizeMouseDown };

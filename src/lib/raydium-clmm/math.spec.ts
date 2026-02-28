@@ -1,6 +1,12 @@
 import Decimal from 'decimal.js';
 import { describe, expect, it } from 'vitest';
-import { calcMinAmountOut, sqrtPriceX64ToPrice } from './math';
+import {
+  calcMinAmountOut,
+  getAmountOutFromSqrtPriceAndLiquidity,
+  getEndSqrtPriceX64AfterSwap,
+  sqrtPriceX64ToPrice,
+  sqrtPriceX64ToTick,
+} from './math';
 
 describe('raydium-clmm math', () => {
   describe('sqrtPriceX64ToPrice', () => {
@@ -69,6 +75,101 @@ describe('raydium-clmm math', () => {
 
       const minOut = calcMinAmountOut(amountIn, price, slippageBps);
       expect(Number(minOut)).toBe(1_485_000_001);
+    });
+  });
+
+  describe('getAmountOutFromSqrtPriceAndLiquidity', () => {
+    const Q64 = 2n ** 64n;
+
+    it('returns 0 when amountIn or liquidity is 0', () => {
+      expect(
+        getAmountOutFromSqrtPriceAndLiquidity(Q64, 1_000_000n, 0n, true)
+      ).toBe(0n);
+      expect(
+        getAmountOutFromSqrtPriceAndLiquidity(Q64, 0n, 1_000_000n, true)
+      ).toBe(0n);
+    });
+
+    it('zeroForOne: token0 in gives token1 out', () => {
+      const s = Q64;
+      const L = 1_000_000_000_000n;
+      const amountIn = 1_000_000n;
+      const out = getAmountOutFromSqrtPriceAndLiquidity(s, L, amountIn, true);
+      expect(out).toBeGreaterThan(0n);
+      expect(out).toBeLessThan(amountIn * 2n);
+    });
+
+    it('oneForZero: token1 in gives token0 out', () => {
+      const s = Q64;
+      const L = 1_000_000_000_000n;
+      const amountIn = 1_000_000n;
+      const out = getAmountOutFromSqrtPriceAndLiquidity(s, L, amountIn, false);
+      expect(out).toBeGreaterThan(0n);
+    });
+
+    it('larger amountIn gives larger amountOut for zeroForOne', () => {
+      const s = Q64;
+      const L = 10n ** 18n;
+      const out1 = getAmountOutFromSqrtPriceAndLiquidity(
+        s,
+        L,
+        1_000_000n,
+        true
+      );
+      const out2 = getAmountOutFromSqrtPriceAndLiquidity(
+        s,
+        L,
+        2_000_000n,
+        true
+      );
+      expect(out2).toBeGreaterThan(out1);
+    });
+  });
+
+  describe('getEndSqrtPriceX64AfterSwap', () => {
+    const Q64 = 2n ** 64n;
+
+    it('returns null when liquidity or amountIn is 0', () => {
+      expect(getEndSqrtPriceX64AfterSwap(Q64, 0n, 1_000_000n, true)).toBeNull();
+      expect(getEndSqrtPriceX64AfterSwap(Q64, 1_000_000n, 0n, true)).toBeNull();
+    });
+
+    it('zeroForOne: end price is lower than current', () => {
+      const s = Q64;
+      const L = 1_000_000_000_000n;
+      const amountIn = 1_000_000n;
+      const end = getEndSqrtPriceX64AfterSwap(s, L, amountIn, true);
+      expect(end).not.toBeNull();
+      expect(end!).toBeLessThan(s);
+    });
+
+    it('oneForZero: end sqrt price is lower than current (more token0 out)', () => {
+      const s = Q64;
+      const L = 1_000_000_000_000n;
+      const amountIn = 1_000_000n;
+      const end = getEndSqrtPriceX64AfterSwap(s, L, amountIn, false);
+      expect(end).not.toBeNull();
+      expect(end!).toBeLessThan(s);
+    });
+  });
+
+  describe('sqrtPriceX64ToTick', () => {
+    it('tick 0 corresponds to sqrtPriceX64 = 2^64', () => {
+      const Q64 = 2n ** 64n;
+      const tick = sqrtPriceX64ToTick(Q64);
+      expect(tick).toBe(0);
+    });
+
+    it('higher sqrtPrice gives positive tick', () => {
+      const Q64 = 2n ** 64n;
+      const tick = sqrtPriceX64ToTick(Q64 * 2n);
+      expect(tick).toBeGreaterThan(0);
+    });
+
+    it('lower sqrtPrice gives negative tick', () => {
+      const Q64 = 2n ** 64n;
+      const tick = sqrtPriceX64ToTick(Q64 / 2n);
+      expect(tick).toBeLessThan(0);
     });
   });
 });

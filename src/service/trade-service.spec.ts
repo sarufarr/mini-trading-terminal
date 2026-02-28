@@ -8,23 +8,29 @@ import {
   parseSimulationError,
 } from '@/service/trade-service';
 import type { Env } from '@/env';
+import { EnvSchema } from '@/env';
 import { FEE_RESERVE_LAMPORTS } from '@/constants/trade';
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
+import type { z } from 'zod';
 
-const mockEnv = (overrides: Partial<Env> = {}): Env =>
-  ({
-    VITE_DRY_RUN: false,
-    VITE_DRY_RUN_RESULT: 'success',
-    VITE_JITO_BLOCK_ENGINE_URL: undefined,
-    VITE_JITO_TIP_LAMPORTS: undefined,
-    ...overrides,
-  }) as Env;
+const BASE_ENV = {
+  VITE_CODEX_API_KEY: 'test-codex-key',
+  VITE_HELIUS_RPC_URL: 'https://api.example.com',
+  VITE_SOLANA_PRIVATE_KEY: '11111111111111111111111111111111',
+};
+
+/** Parse input shape for EnvSchema (optional keys as string, e.g. VITE_DRY_RUN 'true', VITE_JITO_TIP_LAMPORTS '5000'). */
+type EnvParseInput = z.input<typeof EnvSchema>;
+
+/** Build mock Env validated by EnvSchema so tests stay in sync with runtime env shape. */
+const createMockEnv = (overrides: Partial<EnvParseInput> = {}): Env =>
+  EnvSchema.parse({ ...BASE_ENV, ...overrides }) as Env;
 
 describe('trade-service', () => {
   describe('getTradeConfig', () => {
     it('returns dry run and jito config from env', () => {
-      const env = mockEnv({
-        VITE_DRY_RUN: true,
+      const env = createMockEnv({
+        VITE_DRY_RUN: 'true',
         VITE_DRY_RUN_RESULT: 'fail',
         VITE_JITO_BLOCK_ENGINE_URL: 'https://jito.example.com',
         VITE_JITO_TIP_LAMPORTS: '5000',
@@ -37,28 +43,28 @@ describe('trade-service', () => {
     });
 
     it('defaults dry run to false and result to success', () => {
-      const env = mockEnv({});
+      const env = createMockEnv({});
       const config = getTradeConfig(env);
       expect(config.isDryRun).toBe(false);
       expect(config.dryRunResult).toBe('success');
     });
 
     it('uses default jito tip when not set or invalid', () => {
-      const envNoTip = mockEnv({
+      const envNoTip = createMockEnv({
         VITE_JITO_BLOCK_ENGINE_URL: 'https://jito.example.com',
         VITE_JITO_TIP_LAMPORTS: undefined,
       });
       expect(getTradeConfig(envNoTip).jitoTipLamports).toBe(10_000);
 
-      const envEmpty = mockEnv({
+      const envEmpty = createMockEnv({
         VITE_JITO_BLOCK_ENGINE_URL: 'https://jito.example.com',
-        VITE_JITO_TIP_LAMPORTS: '',
+        VITE_JITO_TIP_LAMPORTS: undefined,
       });
       expect(getTradeConfig(envEmpty).jitoTipLamports).toBe(10_000);
 
-      const envInvalid = mockEnv({
+      const envInvalid = createMockEnv({
         VITE_JITO_BLOCK_ENGINE_URL: 'https://jito.example.com',
-        VITE_JITO_TIP_LAMPORTS: 'abc',
+        VITE_JITO_TIP_LAMPORTS: undefined,
       });
       expect(getTradeConfig(envInvalid).jitoTipLamports).toBe(10_000);
     });

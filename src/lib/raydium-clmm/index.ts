@@ -2,6 +2,7 @@ import {
   Connection,
   PublicKey,
   SystemProgram,
+  TransactionInstruction,
   TransactionMessage,
   VersionedTransaction,
   BlockhashWithExpiryBlockHeight,
@@ -19,9 +20,18 @@ import {
   buildSwapBaseInputInstruction,
   getTokenProgramId,
 } from './instruction';
-import { sqrtPriceX64ToPrice, calcMinAmountOut } from './math';
-import Decimal from 'decimal.js';
+import {
+  calcQuoteInWorker,
+  getEndSqrtPriceX64AfterSwapInWorker,
+  sqrtPriceX64ToTickInWorker,
+} from './worker-client';
+import type { ClmmPoolStateSnapshot } from './clmm-pool-cache';
 import { DEFAULT_SLIPPAGE_BPS } from '@/constants/trade';
+import {
+  getDynamicPriorityFee,
+  makeComputeBudgetInstructions,
+  computeUnitLimitForTickArrays,
+} from '@/lib/priority-fee';
 
 export interface ClmmSwapParams {
   connection: Connection;
@@ -39,6 +49,53 @@ export interface BuildClmmSwapTransactionResult {
 
 export { findClmmPool } from './pool';
 
+export interface ClmmQuoteParams {
+  connection: Connection;
+  poolId: PublicKey;
+  inputMint: PublicKey;
+  amountIn: bigint;
+  slippageBps?: number;
+}
+
+export async function getClmmQuote(params: ClmmQuoteParams): Promise<{
+  minAmountOut: bigint;
+  poolStateSnapshot: Omit<ClmmPoolStateSnapshot, 'fetchedAt'>;
+}> {
+  const {
+    connection,
+    poolId,
+    inputMint,
+    amountIn,
+    slippageBps = DEFAULT_SLIPPAGE_BPS,
+  } = params;
+  const poolState = await fetchPoolState(connection, poolId);
+  const zeroForOne = inputMint.equals(poolState.token0Mint);
+  if (poolState.sqrtPriceX64 === 0n) {
+    throw new Error('Pool price is zero, cannot calculate swap amount');
+  }
+  const minAmountOut = await calcQuoteInWorker(
+    poolState.sqrtPriceX64,
+    amountIn,
+    slippageBps,
+    zeroForOne
+  );
+  const poolStateSnapshot: Omit<ClmmPoolStateSnapshot, 'fetchedAt'> = {
+    sqrtPriceX64: poolState.sqrtPriceX64,
+    liquidity: poolState.liquidity,
+    token0Mint: poolState.token0Mint.toBase58(),
+    token1Mint: poolState.token1Mint.toBase58(),
+  };
+  return { minAmountOut, poolStateSnapshot };
+}
+
+export type { ClmmPoolStateSnapshot } from './clmm-pool-cache';
+export {
+  getLocalClmmQuote,
+  getLocalClmmQuoteAsync,
+  setClmmPoolCache,
+} from './clmm-pool-cache';
+export { warmClmmPoolCache } from './pool-cache-warm';
+
 export async function buildClmmSwapTransaction(
   params: ClmmSwapParams
 ): Promise<BuildClmmSwapTransactionResult> {
@@ -54,23 +111,48 @@ export async function buildClmmSwapTransaction(
   const poolState = await fetchPoolState(connection, poolId);
   const zeroForOne = inputMint.equals(poolState.token0Mint);
 
-  const priceAtomic = sqrtPriceX64ToPrice(poolState.sqrtPriceX64);
-
-  if (priceAtomic.isZero())
+  if (poolState.sqrtPriceX64 === 0n) {
     throw new Error('Pool price is zero, cannot calculate swap amount');
-  const effectivePrice = zeroForOne
-    ? priceAtomic
-    : new Decimal(1).div(priceAtomic);
-  const minAmountOut = calcMinAmountOut(amountIn, effectivePrice, slippageBps);
+  }
 
+  const endSqrtPrice = await getEndSqrtPriceX64AfterSwapInWorker(
+    poolState.sqrtPriceX64,
+    poolState.liquidity,
+    amountIn,
+    zeroForOne
+  );
+  const endTick =
+    endSqrtPrice != null
+      ? await sqrtPriceX64ToTickInWorker(endSqrtPrice)
+      : null;
   const tickArrays = getSwapTickArrays(
     poolId,
     poolState.tickCurrent,
     poolState.tickSpacing,
+    zeroForOne,
+    endTick
+  );
+
+  const minAmountOut = await calcQuoteInWorker(
+    poolState.sqrtPriceX64,
+    amountIn,
+    slippageBps,
     zeroForOne
   );
 
-  const instructions = [];
+  const cuLimit = computeUnitLimitForTickArrays(tickArrays.length);
+  const { microLamports, computeUnitLimit } = await getDynamicPriorityFee(
+    connection,
+    { computeUnitLimit: cuLimit }
+  );
+  const computeBudgetIxs = makeComputeBudgetInstructions({
+    microLamports,
+    computeUnitLimit,
+  });
+
+  const instructions: TransactionInstruction[] = [];
+  instructions.push(...computeBudgetIxs);
+
   const inputIsSOL = inputMint.equals(NATIVE_MINT);
   const outputMint = zeroForOne ? poolState.token1Mint : poolState.token0Mint;
   const outputIsSOL = outputMint.equals(NATIVE_MINT);

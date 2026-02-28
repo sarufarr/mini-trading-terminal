@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { cn } from '@/lib/cn';
 
 interface GlitchTextProps {
   text: string;
@@ -13,13 +14,13 @@ const defaultCharSet =
 const defaultIntervalMs = 100;
 const defaultIterationsPerChar = 10;
 
-export const GlitchText: React.FC<GlitchTextProps> = ({
+export function GlitchText({
   text,
   className = '',
   charSet = defaultCharSet,
   intervalMs = defaultIntervalMs,
   iterationsPerChar = defaultIterationsPerChar,
-}) => {
+}: GlitchTextProps) {
   const [displayText, setDisplayText] = useState(text);
   const [isAnimating, setIsAnimating] = useState(false);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -70,7 +71,6 @@ export const GlitchText: React.FC<GlitchTextProps> = ({
 
   const animationClass = isAnimating ? 'opacity-75' : '';
 
-  return (
-    <span className={`${className} ${animationClass}`}>{displayText}</span>
-  );
-};
+  return <span className={cn(className, animationClass)}>{displayText}</span>;
+}
+GlitchText.displayName = 'GlitchText';

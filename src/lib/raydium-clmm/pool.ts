@@ -4,6 +4,7 @@ import { RAYDIUM_CLMM_PROGRAM_ID } from './constants';
 import type { PoolState } from './types';
 import { readI32LE, readPubkey, readU128LE, readU16LE, readU8 } from '../utils';
 import { parseAccountData } from './util';
+import { parsePoolsFilterInWorker } from './worker-client';
 
 const POOL_LAYOUT = (() => {
   let cursor = 8 + 1 + 7;
@@ -136,15 +137,9 @@ export async function findClmmPool(
   ]);
 
   const all = [...asToken0, ...asToken1];
-  const withQuote = all.filter((item) => {
-    const { data } = parseAccountData(item.account.data);
-    const t0 = readPubkey(data, POOL_LAYOUT.token0Mint);
-    const t1 = readPubkey(data, POOL_LAYOUT.token1Mint);
-    const other = t0.equals(tokenMint) ? t1 : t0;
-    return other.equals(quoteMint);
-  });
+  const poolPubkey = await parsePoolsFilterInWorker(all, tokenMint, quoteMint);
 
-  if (withQuote.length === 0) {
+  if (!poolPubkey) {
     poolAddressCache.set(cacheKey, {
       value: null,
       expiresAt: now + POOL_CACHE_TTL_MS,
@@ -152,17 +147,21 @@ export async function findClmmPool(
     return null;
   }
 
-  const best = withQuote.reduce((prev, curr) => {
-    const { view: prevView } = parseAccountData(prev.account.data);
-    const { view: currView } = parseAccountData(curr.account.data);
-    const prevLiq = readU128LE(prevView, POOL_LAYOUT.liquidity);
-    const currLiq = readU128LE(currView, POOL_LAYOUT.liquidity);
-    return currLiq > prevLiq ? curr : prev;
-  });
-
   poolAddressCache.set(cacheKey, {
-    value: best.pubkey,
+    value: poolPubkey,
     expiresAt: now + POOL_CACHE_TTL_MS,
   });
-  return best.pubkey;
+  return poolPubkey;
+}
+
+export function selectPoolByLiquidity<T>(
+  items: T[],
+  getLiquidity: (item: T) => bigint
+): T | null {
+  if (items.length === 0) return null;
+  return items.reduce((prev, curr) => {
+    const prevLiq = getLiquidity(prev);
+    const currLiq = getLiquidity(curr);
+    return currLiq > prevLiq ? curr : prev;
+  });
 }

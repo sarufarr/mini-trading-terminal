@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Decimal from 'decimal.js';
-import { useCodexClient } from '@/contexts/CodexContext';
+import { useCodexClient } from '@/contexts/use-codex-client';
 import { keypair } from '@/lib/solana';
 import { MIN_LOADING_MS } from '@/constants/ui';
+import { devLog } from '@/lib/dev-log';
 
 interface UseBalanceReturn {
   nativeBalance: number;
@@ -52,8 +53,10 @@ export const useBalance: TUseBalance = (
       });
 
       const items = response?.balances?.items ?? [];
-
-      const native = items.find((i) => i.tokenId === `native:${networkId}`);
+      type BalanceItem = { tokenId?: string; balance?: string };
+      const native = items.find(
+        (i: BalanceItem) => i.tokenId === `native:${networkId}`
+      );
       if (native) {
         const atomic = new Decimal(native.balance);
         setNativeAtomicBalance(atomic);
@@ -64,7 +67,7 @@ export const useBalance: TUseBalance = (
       }
 
       const token = items.find(
-        (i) => i.tokenId === `${tokenAddress}:${networkId}`
+        (i: BalanceItem) => i.tokenId === `${tokenAddress}:${networkId}`
       );
       if (token) {
         const atomic = new Decimal(token.balance);
@@ -77,7 +80,7 @@ export const useBalance: TUseBalance = (
     } catch (err) {
       const next = err instanceof Error ? err : new Error(String(err));
       setError(next);
-      console.error('[useBalance] Failed to fetch balances:', next);
+      devLog.error('[useBalance] Failed to fetch balances:', next);
     } finally {
       if (import.meta.env.DEV) {
         const elapsed = Date.now() - start;

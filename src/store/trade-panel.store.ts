@@ -1,8 +1,11 @@
+/**
+ * Panel slice: floating trade panel UI (open/close, position, size, active tab).
+ * Trade input (amount, slippage, phase) lives in useTradeStore; pool data in usePoolStore.
+ */
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { ETradeDirection } from '@/types/trade';
 import { getViewportSize } from '@/lib/dom';
-import { DEFAULT_SLIPPAGE_BPS } from '@/constants/trade';
 
 export interface Position {
   x: number;
@@ -18,7 +21,6 @@ interface TradePanelStore {
   position: Position;
   size: Size;
   activeTab: ETradeDirection;
-  slippageBps: number;
 
   open: () => void;
   close: () => void;
@@ -26,10 +28,9 @@ interface TradePanelStore {
   setPosition: (position: Position) => void;
   setSize: (size: Size) => void;
   setActiveTab: (activeTab: ETradeDirection) => void;
-  setSlippageBps: (slippageBps: number) => void;
 }
 
-const PANEL_DEFAULT_SIZE: Size = { width: 320, height: 480 };
+const PANEL_DEFAULT_SIZE: Size = { width: 360, height: 560 };
 export const PANEL_BOUNDS_MARGIN = 12;
 
 export const useTradePanelStore = create<TradePanelStore>()(
@@ -39,7 +40,6 @@ export const useTradePanelStore = create<TradePanelStore>()(
       position: { x: 0, y: 0 },
       size: PANEL_DEFAULT_SIZE,
       activeTab: ETradeDirection.BUY,
-      slippageBps: DEFAULT_SLIPPAGE_BPS,
 
       open: () => set({ isOpen: true }),
       close: () => set({ isOpen: false }),
@@ -47,15 +47,11 @@ export const useTradePanelStore = create<TradePanelStore>()(
       setPosition: (position) => set({ position }),
       setSize: (size) => set({ size }),
       setActiveTab: (activeTab) => set({ activeTab }),
-      setSlippageBps: (slippageBps) => set({ slippageBps }),
     }),
     {
-      name: 'floating-trade-panel',
-      partialize: (s) => ({
-        position: s.position,
-        size: s.size,
-        slippageBps: s.slippageBps,
-      }),
+      name: 'trade-panel-store',
+      partialize: (s) => ({ position: s.position, size: s.size }),
+      // Rehydration: clamp position to viewport so the panel is never off-screen after load or resize.
       onRehydrateStorage: () => (state, error) => {
         if (error || !state || typeof window === 'undefined') return;
         const { width, height } = getViewportSize();

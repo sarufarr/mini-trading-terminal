@@ -11,8 +11,14 @@ import { ETradeDirection } from '@/types/trade';
 import { useDraggable } from '@/hooks/use-draggable';
 import { useResizable } from '@/hooks/use-resizable';
 import { usePanelBounds } from '@/hooks/use-panel-bounds';
-import { RESIZE_THROTTLE_MS } from '@/constants/ui';
+import {
+  RESIZE_THROTTLE_MS,
+  PANEL_SPRING_STIFFNESS,
+  PANEL_SPRING_DAMPING,
+} from '@/constants/ui';
 import { getViewportSize } from '@/lib/dom';
+import { connection } from '@/lib/solana';
+import { warmClmmPoolCache } from '@/lib/raydium-clmm';
 import { PanelHeader } from './PanelHeader';
 import { BuyPanel } from './BuyPanel';
 import { SellPanel } from './SellPanel';
@@ -22,19 +28,42 @@ interface Props {
   token: EnhancedToken;
 }
 
-export const FloatingTradingPanel = memo(({ token }: Props) => {
-  const { isOpen, position, size, activeTab, setPosition, setSize, close } =
-    useTradePanelStore(
-      useShallow((s) => ({
-        isOpen: s.isOpen,
-        position: s.position,
-        size: s.size,
-        activeTab: s.activeTab,
-        setPosition: s.setPosition,
-        setSize: s.setSize,
-        close: s.close,
-      }))
-    );
+export const FloatingTradingPanel = memo(function FloatingTradingPanel({
+  token,
+}: Props) {
+  const {
+    isOpen,
+    position,
+    size,
+    activeTab,
+    setPosition,
+    setSize,
+    setActiveTab,
+    open,
+    close,
+  } = useTradePanelStore(
+    useShallow((s) => ({
+      isOpen: s.isOpen,
+      position: s.position,
+      size: s.size,
+      activeTab: s.activeTab,
+      setPosition: s.setPosition,
+      setSize: s.setSize,
+      setActiveTab: s.setActiveTab,
+      open: s.open,
+      close: s.close,
+    }))
+  );
+
+  const executeRef = useRef<{ canTrade: boolean; execute: () => void } | null>(
+    null
+  );
+  const registerExecute = useCallback(
+    (canTrade: boolean, execute: () => void) => {
+      executeRef.current = { canTrade, execute };
+    },
+    []
+  );
 
   const { clampPosition } = usePanelBounds();
 
@@ -60,10 +89,11 @@ export const FloatingTradingPanel = memo(({ token }: Props) => {
     motionX.set(clamped.x);
     motionY.set(clamped.y);
     useTradePanelStore.getState().setPosition(clamped);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // runResize intentionally omits full deps to avoid re-running on every position/size change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- position/size intentionally omitted
   }, [clampPosition]);
 
-  const { handleMouseDown } = useDraggable(
+  const { handlePointerDown } = useDraggable(
     position,
     (pos) => {
       motionX.set(pos.x);
@@ -76,13 +106,13 @@ export const FloatingTradingPanel = memo(({ token }: Props) => {
         if (needsSnap) {
           animate(motionX, clamped.x, {
             type: 'spring',
-            stiffness: 400,
-            damping: 30,
+            stiffness: PANEL_SPRING_STIFFNESS,
+            damping: PANEL_SPRING_DAMPING,
           });
           animate(motionY, clamped.y, {
             type: 'spring',
-            stiffness: 400,
-            damping: 30,
+            stiffness: PANEL_SPRING_STIFFNESS,
+            damping: PANEL_SPRING_DAMPING,
           });
         }
         setPosition(clamped);
@@ -101,7 +131,8 @@ export const FloatingTradingPanel = memo(({ token }: Props) => {
     if (typeof window !== 'undefined') {
       viewportRef.current = getViewportSize();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Sync motion values and viewport ref once on mount; position/size come from store.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only sync
   }, []);
 
   useEffect(() => {
@@ -134,13 +165,49 @@ export const FloatingTradingPanel = memo(({ token }: Props) => {
   }, [isOpen, clampPosition, runResize]);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (typeof window === 'undefined') return;
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close();
+      const target = e.target as Node | null;
+      const isInput =
+        target instanceof HTMLElement &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable);
+      if (e.key === 'Escape') {
+        if (isOpen) {
+          e.preventDefault();
+          close();
+        }
+        return;
+      }
+      if (isInput) return;
+      const key = e.key.toLowerCase();
+      if (key === 'b') {
+        e.preventDefault();
+        if (!isOpen) open();
+        setActiveTab(ETradeDirection.BUY);
+        return;
+      }
+      if (key === 's') {
+        e.preventDefault();
+        if (!isOpen) open();
+        setActiveTab(ETradeDirection.SELL);
+        return;
+      }
+      if (e.key === 'Enter' && isOpen && executeRef.current?.canTrade) {
+        e.preventDefault();
+        executeRef.current.execute();
+      }
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [isOpen, close]);
+  }, [isOpen, open, close, setActiveTab]);
+
+  // Warm CLMM pool cache so getLocalClmmQuote returns getAmountOut instantly when user types amount
+  useEffect(() => {
+    warmClmmPoolCache(connection, token.address).catch(() => {});
+  }, [token.address]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -150,7 +217,8 @@ export const FloatingTradingPanel = memo(({ token }: Props) => {
       motionY.set(clamped.y);
       setPosition(clamped);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Only re-run when panel opens or size changes; position from store to avoid feedback loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- isOpen and size only
   }, [isOpen, size.width, size.height]);
 
   return (
@@ -171,7 +239,7 @@ export const FloatingTradingPanel = memo(({ token }: Props) => {
           exit={{ opacity: 0, scale: 0.95 }}
           transition={{ duration: 0.15, ease: [0.4, 0, 0.2, 1] }}
         >
-          <PanelHeader token={token} onDragMouseDown={handleMouseDown} />
+          <PanelHeader token={token} onDragPointerDown={handlePointerDown} />
 
           <div className="flex-1 overflow-hidden">
             <AnimatePresence mode="wait">
@@ -190,9 +258,12 @@ export const FloatingTradingPanel = memo(({ token }: Props) => {
                 transition={{ duration: 0.12 }}
               >
                 {activeTab === ETradeDirection.BUY ? (
-                  <BuyPanel token={token} />
+                  <BuyPanel token={token} onRegisterExecute={registerExecute} />
                 ) : (
-                  <SellPanel token={token} />
+                  <SellPanel
+                    token={token}
+                    onRegisterExecute={registerExecute}
+                  />
                 )}
               </motion.div>
             </AnimatePresence>
@@ -210,5 +281,4 @@ export const FloatingTradingPanel = memo(({ token }: Props) => {
     </AnimatePresence>
   );
 });
-
 FloatingTradingPanel.displayName = 'FloatingTradingPanel';

@@ -62,7 +62,7 @@ export async function buildSwapBaseInputInstruction(params: {
   payer: PublicKey;
   poolId: PublicKey;
   poolState: PoolState;
-  tickArrays: [PublicKey, PublicKey, PublicKey];
+  tickArrays: PublicKey[];
   amountIn: bigint;
   minAmountOut: bigint;
   zeroForOne: boolean;
@@ -77,6 +77,10 @@ export async function buildSwapBaseInputInstruction(params: {
     minAmountOut,
     zeroForOne,
   } = params;
+
+  if (tickArrays.length === 0) {
+    throw new Error('At least one tick array is required for swap');
+  }
 
   const [inputMint, outputMint] = zeroForOne
     ? [poolState.token0Mint, poolState.token1Mint]

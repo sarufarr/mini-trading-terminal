@@ -18,7 +18,7 @@ export const BalanceRow = memo(function BalanceRow({
 }: BalanceRowProps) {
   return (
     <div
-      className="flex justify-between items-center text-xs text-muted-foreground px-1"
+      className="flex justify-between items-center text-base text-muted-foreground py-0.5"
       aria-busy={loading}
     >
       <span className="flex items-center gap-1.5">{leftLabel}</span>
@@ -48,3 +48,5 @@ export const BalanceRow = memo(function BalanceRow({
     </div>
   );
 });
+
+BalanceRow.displayName = 'BalanceRow';

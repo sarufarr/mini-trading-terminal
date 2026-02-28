@@ -12,6 +12,21 @@ interface ImportMetaEnv {
   readonly VITE_DRY_RUN_RESULT?: string;
 }
 
+// Augments Vite's import.meta; referenced by TypeScript when using import.meta.env
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- ambient declaration
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+/** Google Analytics gtag (optional). Used by reportWebVitals when present. */
+interface Gtag {
+  (command: 'event', eventName: string, params?: Record<string, unknown>): void;
+}
+
+declare global {
+  interface Window {
+    gtag?: Gtag;
+  }
+}
+
+export {};
