@@ -1,4 +1,4 @@
-import { getCodexClient } from '@/lib/codex';
+import { useCodexClient } from '@/contexts/CodexContext';
 import { getErrorMessage } from '@/lib/get-error-message';
 import {
   TokenRankingAttribute,
@@ -11,6 +11,7 @@ import { useEffect, useState } from 'react';
 export function NetworkPage() {
   const { networkId } = useParams<{ networkId: string }>();
   const networkIdNum = parseInt(networkId || '', 10);
+  const codexClient = useCodexClient();
 
   const [tokenListItems, setTokenListItems] = useState<TokenFilterResult[]>([]);
   const [networkName, setNetworkName] = useState<string | null>(null);
@@ -25,8 +26,6 @@ export function NetworkPage() {
     }
 
     const fetchData = async () => {
-      const codexClient = getCodexClient();
-
       try {
         const [networksResult, tokensResponse] = await Promise.all([
           codexClient.queries.getNetworks({}).catch((err: Error) => {
@@ -81,12 +80,15 @@ export function NetworkPage() {
     };
 
     fetchData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [networkIdNum, networkId]);
+  }, [codexClient, networkIdNum, networkId]);
 
   if (loading) {
     return (
-      <main className="flex min-h-screen flex-col items-center p-12 md:p-24">
+      <main
+        className="flex min-h-screen flex-col items-center p-12 md:p-24"
+        aria-busy="true"
+        aria-label="Loading"
+      >
         <p>Loading...</p>
       </main>
     );

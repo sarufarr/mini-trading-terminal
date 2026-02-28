@@ -17,7 +17,10 @@ export const BalanceRow = memo(function BalanceRow({
   children,
 }: BalanceRowProps) {
   return (
-    <div className="flex justify-between items-center text-xs text-muted-foreground px-1">
+    <div
+      className="flex justify-between items-center text-xs text-muted-foreground px-1"
+      aria-busy={loading}
+    >
       <span className="flex items-center gap-1.5">{leftLabel}</span>
       <span className="flex items-center gap-1.5 font-medium text-foreground">
         {loading ? (

@@ -186,6 +186,18 @@ describe('trade-service', () => {
       expect(parsed.isSlippageError).toBe(true);
     });
 
+    it('detects Raydium CLMM slippage InstructionError 6010', () => {
+      const sim = {
+        err: ['InstructionError', 6, { Custom: 6010 }],
+        logs: [
+          'Program log: before_source_balance: 100000, expect_amount_out: 7838, slippage: 15',
+        ],
+      };
+      const parsed = parseSimulationError(sim as never);
+      expect(parsed.isSlippageError).toBe(true);
+      expect(parsed.detailedMessage).toContain('slippage');
+    });
+
     it('detects slippage from log message', () => {
       const sim = {
         err: 'Failed',

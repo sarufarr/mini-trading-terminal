@@ -13,7 +13,13 @@ import {
   SLIPPAGE_MAX_BPS,
   DEFAULT_SLIPPAGE_BPS,
 } from '@/constants/trade';
+import { PRESET_ACCENT_BUTTON } from '@/constants/preset-accent';
 import { useTradePanelStore } from '@/store/trade-panel.store';
+import { ETradeDirection } from '@/types/trade';
+
+interface SlippageSelectorProps {
+  direction: ETradeDirection;
+}
 
 function getSlippageBpsSnapshot() {
   return useTradePanelStore.getState().slippageBps;
@@ -23,13 +29,16 @@ function subscribeToSlippageBps(callback: () => void) {
   return useTradePanelStore.subscribe(callback);
 }
 
-export const SlippageSelector = memo(() => {
+export const SlippageSelector = memo(function SlippageSelector({
+  direction,
+}: SlippageSelectorProps) {
   const slippageBps = useSyncExternalStore(
     subscribeToSlippageBps,
     getSlippageBpsSnapshot,
     () => DEFAULT_SLIPPAGE_BPS
   );
   const setSlippageBps = useTradePanelStore((s) => s.setSlippageBps);
+  const isBuy = direction === ETradeDirection.BUY;
 
   const [inputValue, setInputValue] = useState(() => String(slippageBps / 100));
 
@@ -97,7 +106,7 @@ export const SlippageSelector = memo(() => {
             className={cn(
               'flex-1 min-h-9 py-2 rounded-md text-xs font-medium transition-colors',
               slippageBps === preset
-                ? 'bg-primary/20 text-primary ring-1 ring-primary/40'
+                ? PRESET_ACCENT_BUTTON[isBuy ? 'green' : 'red']
                 : 'bg-muted/40 text-muted-foreground hover:bg-muted/70'
             )}
             aria-label={`Set slippage to ${(preset / 100).toString()}%`}

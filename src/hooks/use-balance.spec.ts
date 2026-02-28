@@ -1,20 +1,22 @@
 /**
  * @vitest-environment jsdom
  */
+import { createElement } from 'react';
+import type { ReactNode } from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor, act } from '@testing-library/react';
+import { CodexProvider } from '@/contexts/CodexContext';
 import { useBalance } from '@/hooks/use-balance';
 
 const mockBalances = vi.hoisted(() => vi.fn());
-vi.mock('@/lib/codex', () => {
-  return {
-    getCodexClient: () => ({
-      queries: {
-        balances: (input: unknown) => mockBalances(input),
-      },
-    }),
-  };
-});
+const mockCodexClient = {
+  queries: {
+    balances: (input: unknown) => mockBalances(input),
+  },
+};
+
+const wrapper = ({ children }: { children: ReactNode }) =>
+  createElement(CodexProvider, { client: mockCodexClient as never }, children);
 
 vi.mock('@/lib/solana', () => ({
   keypair: {
@@ -36,7 +38,9 @@ describe('useBalance', () => {
   it('returns loading true initially and exposes refreshBalance', () => {
     mockBalances.mockImplementation(() => new Promise(() => {}));
 
-    const { result } = renderHook(() => useBalance('tokenAddr', 6, 9, 1));
+    const { result } = renderHook(() => useBalance('tokenAddr', 6, 9, 1), {
+      wrapper,
+    });
 
     expect(result.current.loading).toBe(true);
     expect(result.current.error).toBeNull();
@@ -53,7 +57,9 @@ describe('useBalance', () => {
       },
     });
 
-    const { result } = renderHook(() => useBalance('tokenAddr', 6, 9, 1));
+    const { result } = renderHook(() => useBalance('tokenAddr', 6, 9, 1), {
+      wrapper,
+    });
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false);
@@ -68,7 +74,9 @@ describe('useBalance', () => {
     const err = new Error('Network error');
     mockBalances.mockRejectedValue(err);
 
-    const { result } = renderHook(() => useBalance('tokenAddr', 6, 9, 1));
+    const { result } = renderHook(() => useBalance('tokenAddr', 6, 9, 1), {
+      wrapper,
+    });
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false);
@@ -86,7 +94,9 @@ describe('useBalance', () => {
         },
       });
 
-    const { result } = renderHook(() => useBalance('tokenAddr', 6, 9, 1));
+    const { result } = renderHook(() => useBalance('tokenAddr', 6, 9, 1), {
+      wrapper,
+    });
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false);

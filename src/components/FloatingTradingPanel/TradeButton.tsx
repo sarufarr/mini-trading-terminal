@@ -55,6 +55,7 @@ export const TradeButton = memo(
           whileTap={{ scale: 0.97 }}
           transition={{ duration: 0.1 }}
           aria-label={label}
+          aria-busy={isLoading}
         >
           <AnimatePresence mode="wait">
             <motion.span

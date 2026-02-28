@@ -1,15 +1,20 @@
 import { memo, useCallback, useState } from 'react';
-import { Input } from '@/components/ui/input';
-import { cn } from '@/lib/cn';
 import { useBalance } from '@/hooks/use-balance';
-import { useTrade, ETradePhaseStatus } from '@/hooks/use-trade';
+import { ETradePhaseStatus, useTrade } from '@/hooks/use-trade';
 import { ETradeDirection } from '@/types/trade';
 import { showTradeSuccess, showTradeError } from '@/lib/trade-toast';
 import { getErrorMessage } from '@/lib/get-error-message';
 import type { EnhancedToken } from '@/lib/codex';
 import { useTradePanelStore } from '@/store/trade-panel.store';
-import { SOL_PRESETS, FEE_RESERVE_SOL } from '@/constants/trade';
-import { BalanceRow } from './BalanceRow';
+import {
+  SOL_PRESETS,
+  FEE_RESERVE_SOL,
+  AMOUNT_EPSILON,
+  MAX_AMOUNT_EPSILON,
+} from '@/constants/trade';
+import { BalanceRowWithPresetBadge } from './BalanceRowWithPresetBadge';
+import { PresetButtons } from './PresetButtons';
+import { AmountInputWithMax } from './AmountInputWithMax';
 import { TradePanelLayout } from './TradePanelLayout';
 
 interface Props {
@@ -66,7 +71,7 @@ export const BuyPanel = memo(function BuyPanel({ token }: Props) {
   const isAtMax =
     isMaxSpendable &&
     Number.isFinite(parsedAmount) &&
-    Math.abs(parsedAmount - maxSpendableSol) < 1e-6;
+    Math.abs(parsedAmount - maxSpendableSol) < MAX_AMOUNT_EPSILON;
 
   const handleMax = useCallback(() => {
     if (!isMaxSpendable) return;
@@ -78,33 +83,26 @@ export const BuyPanel = memo(function BuyPanel({ token }: Props) {
     SOL_PRESETS.some(
       (p) =>
         amount === String(p) ||
-        (Number.isFinite(parsedAmount) && Math.abs(parsedAmount - p) < 1e-9)
+        (Number.isFinite(parsedAmount) &&
+          Math.abs(parsedAmount - p) < AMOUNT_EPSILON)
     );
   const isCustomAmount = !isPresetAmount;
 
+  const isPresetSelected = useCallback(
+    (p: number) =>
+      Number.isFinite(parsedAmount) &&
+      Math.abs(parsedAmount - p) < AMOUNT_EPSILON,
+    [parsedAmount]
+  );
+
   const balanceRow = (
-    <BalanceRow
+    <BalanceRowWithPresetBadge
       loading={balanceLoading}
       error={balanceError}
       onRetry={refreshBalance}
-      leftLabel={
-        <>
-          Balance
-          <span
-            className={cn(
-              'px-1.5 py-0.5 rounded text-[10px] font-medium',
-              isCustomAmount
-                ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400'
-                : 'bg-muted/60 text-muted-foreground'
-            )}
-          >
-            {isCustomAmount ? 'Custom' : 'Preset'}
-          </span>
-        </>
-      }
-    >
-      {`${nativeBalance.toFixed(4)} SOL`}
-    </BalanceRow>
+      isCustomAmount={isCustomAmount}
+      balanceContent={`${nativeBalance.toFixed(4)} SOL`}
+    />
   );
 
   return (
@@ -117,55 +115,25 @@ export const BuyPanel = memo(function BuyPanel({ token }: Props) {
       onErrorDismiss={reset}
       tokenSymbol={token.symbol ?? undefined}
     >
-      <div className="flex gap-1.5">
-        {SOL_PRESETS.map((preset) => (
-          <button
-            key={preset}
-            onClick={() => setAmount(String(preset))}
-            aria-label={`Set amount to ${preset} SOL`}
-            className={cn(
-              'flex-1 min-h-9 py-2 rounded-md text-xs font-medium transition-colors',
-              amount === String(preset)
-                ? 'bg-green-500/20 text-green-500 ring-1 ring-green-500/40'
-                : 'bg-muted/40 text-muted-foreground hover:bg-muted/70'
-            )}
-          >
-            {preset}
-          </button>
-        ))}
-      </div>
-      <div className="relative flex items-center">
-        <Input
-          type="number"
-          placeholder="0.00"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          min="0"
-          step="0.001"
-          className="h-12 py-3 px-4 pr-24 text-base rounded-md rounded-r-none border-r-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-        />
-        <div className="absolute right-0 flex items-center h-12 border border-input rounded-r-md bg-muted/30">
-          <button
-            type="button"
-            onClick={handleMax}
-            disabled={!isMaxSpendable}
-            className={cn(
-              'h-full px-3 text-xs font-semibold transition-colors',
-              !isMaxSpendable
-                ? 'cursor-not-allowed text-muted-foreground/50 pointer-events-none'
-                : isAtMax
-                  ? 'bg-green-500/20 text-green-500'
-                  : 'text-foreground hover:bg-muted/60'
-            )}
-            aria-label="Set to max spendable SOL"
-          >
-            Max
-          </button>
-          <span className="pr-3 text-base text-muted-foreground border-l border-input pl-2">
-            SOL
-          </span>
-        </div>
-      </div>
+      <PresetButtons
+        presets={SOL_PRESETS}
+        formatLabel={(p) => String(p)}
+        isSelected={isPresetSelected}
+        onSelect={(p) => setAmount(String(p))}
+        accent="green"
+        ariaLabel={(p) => `Set amount to ${p} SOL`}
+      />
+      <AmountInputWithMax
+        value={amount}
+        onChange={setAmount}
+        onMax={handleMax}
+        maxDisabled={!isMaxSpendable}
+        isAtMax={isAtMax}
+        unitLabel="SOL"
+        accent="green"
+        step="0.001"
+        maxAriaLabel="Set to max spendable SOL"
+      />
     </TradePanelLayout>
   );
 });

@@ -12,6 +12,7 @@ export const TradeErrorDismiss = memo(
     if (!import.meta.env.DEV) return null;
     return (
       <p
+        role="alert"
         className={cn(
           'text-xs text-destructive cursor-pointer hover:underline',
           className

@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { memo, useCallback, useState } from 'react';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -18,7 +18,9 @@ interface TradingPanelProps {
   token: EnhancedToken;
 }
 
-export function TradingPanel({ token }: TradingPanelProps) {
+export const TradingPanel = memo(function TradingPanel({
+  token,
+}: TradingPanelProps) {
   const [tradeMode, setTradeMode] = useState<ETradeDirection>(
     ETradeDirection.BUY
   );
@@ -245,7 +247,7 @@ export function TradingPanel({ token }: TradingPanelProps) {
           </div>
         )}
 
-        <SlippageSelector />
+        <SlippageSelector direction={tradeMode} />
 
         {isProcessing && (
           <p className="text-xs text-muted-foreground text-center animate-pulse">
@@ -292,4 +294,5 @@ export function TradingPanel({ token }: TradingPanelProps) {
       </CardContent>
     </Card>
   );
-}
+});
+TradingPanel.displayName = 'TradingPanel';

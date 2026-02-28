@@ -1,5 +1,6 @@
 import { Routes, Route } from 'react-router-dom';
 import { Toaster } from '@/components/ui/sonner';
+import { CodexProvider } from '@/contexts/CodexContext';
 import { Layout } from './components/Layout';
 import { HomePage } from './pages/HomePage';
 import { NetworkPage } from './pages/NetworkPage';
@@ -7,7 +8,7 @@ import { TokenPage } from './pages/TokenPage';
 
 export function App() {
   return (
-    <>
+    <CodexProvider>
       <Toaster />
       <Layout>
         <Routes>
@@ -19,6 +20,6 @@ export function App() {
           />
         </Routes>
       </Layout>
-    </>
+    </CodexProvider>
   );
 }

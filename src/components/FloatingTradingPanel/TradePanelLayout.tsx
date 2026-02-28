@@ -31,7 +31,7 @@ export const TradePanelLayout = memo(function TradePanelLayout({
     <div className="flex flex-col gap-3 p-3 h-full">
       {balanceRow}
       {children}
-      <SlippageSelector />
+      <SlippageSelector direction={direction} />
       {import.meta.env.DEV && phase.status === ETradePhaseStatus.ERROR && (
         <TradeErrorDismiss
           message={phase.message}

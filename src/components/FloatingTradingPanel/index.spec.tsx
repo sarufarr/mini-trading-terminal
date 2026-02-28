@@ -3,20 +3,21 @@
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, act, waitFor } from '@testing-library/react';
+import { CodexProvider } from '@/contexts/CodexContext';
 import { FloatingTradingPanel } from '@/components/FloatingTradingPanel';
 import { useTradePanelStore } from '@/store/trade-panel.store';
 import type { EnhancedToken } from '@/lib/codex';
 
 const mockBalances = vi.hoisted(() => vi.fn());
-vi.mock('@/lib/codex', () => {
-  return {
-    getCodexClient: () => ({
-      queries: {
-        balances: (input: unknown) => mockBalances(input),
-      },
-    }),
-  };
-});
+const mockCodexClient = {
+  queries: {
+    balances: (input: unknown) => mockBalances(input),
+  },
+};
+
+const TestWrapper = ({ children }: { children: React.ReactNode }) => (
+  <CodexProvider client={mockCodexClient as never}>{children}</CodexProvider>
+);
 
 vi.mock('@/lib/solana', () => ({
   keypair: {
@@ -58,7 +59,11 @@ describe('FloatingTradingPanel', () => {
     act(() => {
       useTradePanelStore.getState().close();
     });
-    const { container } = render(<FloatingTradingPanel token={minimalToken} />);
+    const { container } = render(
+      <TestWrapper>
+        <FloatingTradingPanel token={minimalToken} />
+      </TestWrapper>
+    );
     expect(container.querySelector('[class*="fixed"]')).toBeNull();
   });
 
@@ -66,7 +71,11 @@ describe('FloatingTradingPanel', () => {
     act(() => {
       useTradePanelStore.getState().open();
     });
-    render(<FloatingTradingPanel token={minimalToken} />);
+    render(
+      <TestWrapper>
+        <FloatingTradingPanel token={minimalToken} />
+      </TestWrapper>
+    );
 
     await waitFor(() => {
       expect(screen.getByText('Balance')).toBeDefined();

@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Command,
@@ -19,7 +20,7 @@ interface NetworkListProps {
   initialError: string | null;
 }
 
-export function NetworkList({
+export const NetworkList = memo(function NetworkList({
   topNetworks,
   restNetworks,
   initialError,
@@ -71,4 +72,5 @@ export function NetworkList({
       </CommandList>
     </Command>
   );
-}
+});
+NetworkList.displayName = 'NetworkList';

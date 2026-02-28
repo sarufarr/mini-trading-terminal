@@ -1,10 +1,10 @@
-import { ReactNode, useEffect } from 'react';
+import { memo, ReactNode, useEffect } from 'react';
 
 interface LayoutProps {
   children: ReactNode;
 }
 
-export function Layout({ children }: LayoutProps) {
+export const Layout = memo(function Layout({ children }: LayoutProps) {
   useEffect(() => {
     const link = document.createElement('link');
     link.href =
@@ -20,4 +20,5 @@ export function Layout({ children }: LayoutProps) {
   }, []);
 
   return <>{children}</>;
-}
+});
+Layout.displayName = 'Layout';

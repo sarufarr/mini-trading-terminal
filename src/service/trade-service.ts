@@ -2,6 +2,7 @@ import type { Keypair } from '@solana/web3.js';
 import {
   LAMPORTS_PER_SOL,
   PublicKey,
+  SendTransactionError,
   SystemProgram,
   TransactionMessage,
   VersionedTransaction,
@@ -35,8 +36,10 @@ import { env } from '@/env';
 import type { Env } from '@/env';
 
 const JUPITER_SLIPPAGE_EXCEEDED_ERROR_CODE = 6001;
+/** Raydium CLMM swap min amount out / slippage exceeded */
+const RAYDIUM_SLIPPAGE_EXCEEDED_ERROR_CODE = 6010;
 export const SLIPPAGE_ERROR_MESSAGE =
-  'Slippage tolerance exceeded: received less than minimum (Jupiter error 6001). Try increasing slippage and retry.';
+  'Slippage tolerance exceeded: received less than minimum. Try increasing slippage and retry.';
 
 export interface TradeConfig {
   isDryRun: boolean;
@@ -118,21 +121,32 @@ export interface ParsedSimulationError {
 function isSlippageToleranceExceeded(
   err: unknown,
   reason: string,
-  detailedMessage: string
+  detailedMessage: string,
+  logs?: string[]
 ): boolean {
   if (
     Array.isArray(err) &&
     err[0] === 'InstructionError' &&
     err[2] &&
     typeof err[2] === 'object' &&
-    'Custom' in err[2] &&
-    (err[2] as { Custom: number }).Custom ===
-      JUPITER_SLIPPAGE_EXCEEDED_ERROR_CODE
+    'Custom' in err[2]
   ) {
+    const code = (err[2] as { Custom: number }).Custom;
+    if (
+      code === JUPITER_SLIPPAGE_EXCEEDED_ERROR_CODE ||
+      code === RAYDIUM_SLIPPAGE_EXCEEDED_ERROR_CODE
+    ) {
+      return true;
+    }
+  }
+  const slippagePattern = /0x1771|6001|6010|SlippageToleranceExceeded/i;
+  if (slippagePattern.test(reason) || slippagePattern.test(detailedMessage)) {
     return true;
   }
-  const slippagePattern = /0x1771|6001|SlippageToleranceExceeded/i;
-  return slippagePattern.test(reason) || slippagePattern.test(detailedMessage);
+  if (Array.isArray(logs) && logs.some((l) => slippagePattern.test(l))) {
+    return true;
+  }
+  return false;
 }
 
 export function parseSimulationError(
@@ -242,14 +256,14 @@ export async function executeTrade(
   const { isDryRun, dryRunResult, useJito, jitoTipLamports } = config;
   const { direction, slippageBps } = params;
 
-  const atomicAmount = calculateTradeAtomicAmount(params);
+  let amountToUse = calculateTradeAtomicAmount(params);
 
   if (!isDryRun) {
     if (direction === ETradeDirection.BUY) {
       const solBalance = await getSolanaBalance(conn, kp.publicKey.toBase58());
       validateBalanceForTrade({
         direction: ETradeDirection.BUY,
-        atomicAmount,
+        atomicAmount: amountToUse,
         solBalance,
         tokenBalance: null,
         tokenAddress,
@@ -263,9 +277,18 @@ export async function executeTrade(
         kp.publicKey.toBase58(),
         tokenAddress
       );
+      if (tokenBalance === null) {
+        throw new Error('Failed to fetch token balance');
+      }
+      amountToUse = Decimal.min(amountToUse, tokenBalance);
+      if (amountToUse.lte(0)) {
+        throw new Error(
+          'Insufficient token balance: no balance to sell. Refresh and try again.'
+        );
+      }
       validateBalanceForTrade({
         direction: ETradeDirection.SELL,
-        atomicAmount,
+        atomicAmount: amountToUse,
         solBalance: null,
         tokenBalance,
         tokenAddress,
@@ -291,7 +314,7 @@ export async function executeTrade(
     networkId,
     inputMint,
     outputMint,
-    amount: bn(atomicAmount),
+    amount: bn(amountToUse),
     signer: kp.publicKey,
     slippageBps: slippageBps ?? DEFAULT_SLIPPAGE_BPS,
   });
@@ -362,8 +385,33 @@ export async function executeTrade(
   }
 
   onBeforeSend?.();
-  const txid = await sendTransaction(conn, signed);
-  const result = await confirmAndNotify(conn, txid, blockhashCtx, onAfterSend);
-  onSuccess?.();
-  return result;
+  try {
+    const txid = await sendTransaction(conn, signed);
+    const result = await confirmAndNotify(
+      conn,
+      txid,
+      blockhashCtx,
+      onAfterSend
+    );
+    onSuccess?.();
+    return result;
+  } catch (sendErr: unknown) {
+    const slippagePattern = /0x1771|6001|6010|SlippageToleranceExceeded/i;
+    const message =
+      sendErr instanceof Error ? sendErr.message : String(sendErr);
+    if (slippagePattern.test(message)) {
+      throw new Error(SLIPPAGE_ERROR_MESSAGE);
+    }
+    if (sendErr instanceof SendTransactionError) {
+      const logs = sendErr.logs ?? (await sendErr.getLogs(conn));
+      if (Array.isArray(logs) && logs.some((l) => slippagePattern.test(l))) {
+        throw new Error(SLIPPAGE_ERROR_MESSAGE);
+      }
+      throw new Error(
+        sendErr.transactionError.message +
+          (logs?.length ? `\nLogs: ${logs.slice(-5).join(' ')}` : '')
+      );
+    }
+    throw sendErr;
+  }
 }

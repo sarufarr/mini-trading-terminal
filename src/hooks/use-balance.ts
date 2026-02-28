@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Decimal from 'decimal.js';
-import { getCodexClient } from '@/lib/codex';
+import { useCodexClient } from '@/contexts/CodexContext';
 import { keypair } from '@/lib/solana';
 import { MIN_LOADING_MS } from '@/constants/ui';
 
@@ -36,13 +36,13 @@ export const useBalance: TUseBalance = (
   const [error, setError] = useState<Error | null>(null);
 
   const walletAddress = useMemo(() => keypair.publicKey.toBase58(), []);
+  const codexClient = useCodexClient();
 
   const refreshBalance = useCallback(async () => {
     setLoading(true);
     setError(null);
     const start = Date.now();
     try {
-      const codexClient = getCodexClient();
       const response = await codexClient.queries.balances({
         input: {
           networks: [networkId],
@@ -87,7 +87,14 @@ export const useBalance: TUseBalance = (
       }
       setLoading(false);
     }
-  }, [tokenAddress, networkId, nativeDecimals, tokenDecimals, walletAddress]);
+  }, [
+    codexClient,
+    tokenAddress,
+    networkId,
+    nativeDecimals,
+    tokenDecimals,
+    walletAddress,
+  ]);
 
   useEffect(() => {
     refreshBalance();

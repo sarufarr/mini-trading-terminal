@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { NetworkList } from '@/components/NetworkList';
-import { getCodexClient } from '@/lib/codex';
+import { useCodexClient } from '@/contexts/CodexContext';
 
 type Network = {
   id: number;
@@ -22,6 +22,7 @@ const topNetworkNames = [
 ];
 
 export function HomePage() {
+  const codexClient = useCodexClient();
   const [topNetworks, setTopNetworks] = useState<Network[]>([]);
   const [restNetworks, setRestNetworks] = useState<Network[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -29,7 +30,6 @@ export function HomePage() {
 
   useEffect(() => {
     const fetchNetworks = async () => {
-      const codexClient = getCodexClient();
       try {
         const result = await codexClient.queries.getNetworks({});
         const allNetworks =
@@ -63,7 +63,7 @@ export function HomePage() {
     };
 
     fetchNetworks();
-  }, []);
+  }, [codexClient]);
 
   return (
     <main className="flex min-h-screen flex-col p-12 md:p-24">
@@ -76,7 +76,11 @@ export function HomePage() {
         </p>
       </div>
 
-      <div className="w-full max-w-md mx-auto flex-grow flex flex-col">
+      <div
+        className="w-full max-w-md mx-auto flex-grow flex flex-col"
+        aria-busy={loading}
+        aria-label={loading ? 'Loading networks' : undefined}
+      >
         {loading ? (
           <p className="text-center">Loading networks...</p>
         ) : (
